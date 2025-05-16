@@ -26,8 +26,10 @@ The official GitHub repository for Arkavo's Web Backend and React App - an integ
 
 ### Prerequisites
 - A public, internet-facing host (e.g., AWS EC2 instance)
-- Docker and Docker Compose
 - Git
+The Setup script can install
+- Docker
+- Python
 
 ### Setup Steps
 
