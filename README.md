@@ -1,198 +1,115 @@
-![600_525601074](https://github.com/user-attachments/assets/2c8473b5-19f7-4d77-a16d-8514967b956b)
 
-[![Matrix Room](https://img.shields.io/badge/Matrix-Join%20Chat-orange)](https://matrix.to/#/!NRTafywrMGISLMcipa:matrix.org?via=matrix.org)
+<p align="center">
+  <img src="https://github.com/user-attachments/assets/4f5b5d0a-2afd-4786-b817-f1b17f5427c3" alt="Arkavo System Diagram"/>
+</p>
 
-# Arkavo DevSecOps
-## The Official GitHub Repository for Arkavo's Web Backend and React App
-DevSecOps LangGraph
+# Arkavo Platform
 
-Note: Users interested in modifying the Frontend to represent your own brand should see the [WebApp Readme](webapp/README.md)
+<p align="center">
+  <a href="https://chat.whatsapp.com/JFlI9aRvNaGCTU2lOFXpOt">
+    <img src="https://img.shields.io/badge/WhatsApp-Join%20Chat-25D366?style=for-the-badge&logo=whatsapp&logoColor=white" alt="WhatsApp Group"/>
+  </a>
+  <img src="https://img.shields.io/badge/status-active-brightgreen?style=for-the-badge" alt="Status"/>
+  <img src="https://img.shields.io/badge/license-MIT-blue?style=for-the-badge" alt="License"/>
+</p>
 
-## Introduction
-This repository is an amalgamation of best-in-class tools in Security and AI, arranged to work together with minimum configuration. Practically it serves as the entire backend for the Arkavo forum. 
+## 📑 Overview
 
-Components of this repo include  
-- **Ollama** - The best-in-class open-source LLM management solution
-- **Keycloak** - The best-in-class open-source identity and auth solution
-- **OpenTDF** - The best-in-class Attribute-Based Access Control (ABAC) addendum to Keycloak
-- **Org** - Handles needs of organizations using Arkavo forum - Events, Communications, Permissions
-- **Nginx-Proxy** - Serves the other services as HTTPS  
-- **Synapse** - The best-in-class open-source Instant Messenger solution
-- **AICouncil** - Recommends improvements to this repo in real time
+The official GitHub repository for Arkavo's Web Backend and React App - an integrated security and AI platform.
 
-## System Diagram
-![Architecture](./diagrams/architecture.png)
+> [!NOTE]
+> **The official secure Arkavo hosted backend is FREE to use!**  
+> Most users wanting to host their own platform should refer to the [WebApp Readme](webapp/README.md).  
+> If you insist on running your own backend, read on.
 
-# System Diagram - Mermaid
+## 🧰 Installation
+
+### Prerequisites
+- A public, internet-facing host (e.g., AWS EC2 instance)
+- Docker and Docker Compose
+- Git
+
+### Setup Steps
+
+1. **Clone the repository**
+   ```bash
+   git clone https://github.com/arkavo-org/arkavo-platform/
+   cd arkavo-platform
+   ```
+
+2. **Run the backend initially**
+   ```bash
+   python run.py
+   ```
+   This will generate all your template files.
+
+3. **Configure your instance**
+   - Edit `editme.py` to customize your brand name and colors
+   - Obtain necessary SSL certificates and copy them as `fullchain.pem` and `privkey.pem` in `/certs` directory
+
+4. **Launch with templates**
+   ```bash
+   python run.py
+   ```
+
+5. **Verify installation**
+   - Navigate to `https://yourhost/` to ensure the included frontend is running
+
+## 🏗️ Architecture
+
+Arkavo Platform integrates best-in-class tools for Security and AI, arranged to work together with minimal configuration.
+
+### Core Components
+
+| Component | Description |
+|-----------|-------------|
+| **Ollama** | Best-in-class open-source LLM management solution |
+| **Keycloak** | Best-in-class open-source identity and authentication solution |
+| **OpenTDF** | Best-in-class Attribute-Based Access Control (ABAC) addendum to Keycloak |
+| **Org** | Handles organizational needs - Events, Communications, Permissions |
+| **Nginx-Proxy** | Serves other services via HTTPS |
+| **Synapse** | Best-in-class open-source Instant Messenger solution |
+
+## 🔄 System Diagram
+
 ```mermaid
 graph LR
-    %% Define components
-    Keycloak["Keycloak+DB"]
-    OpenTDF["OpenTDF+DB"]
-    OrgBackend["Org-Backend"]
-    ReactFrontend["React-Frontend"]
-
+    %% Define components with styling
+    Keycloak["Keycloak+DB"]:::auth
+    OpenTDF["OpenTDF+DB"]:::security
+    OrgBackend["Org-Backend"]:::backend
+    ReactFrontend["React-Frontend"]:::frontend
+    
     %% Connections with labels
     OpenTDF -->|Authenticates with| Keycloak
     OrgBackend -->|Authenticates with| Keycloak
     ReactFrontend -->|Authenticates with| Keycloak
     ReactFrontend -->|Interacts with| OpenTDF
     ReactFrontend -->|Interacts with| OrgBackend
-```
-
-## AICouncil
-Tools are included to enforce OWASP best practices, run continuous AI-driven penetration testing, and provide implementation feedback on request. An AI Council engages in consistant dialogue about the "main" and "dev" branch and may make pull requests according to _Robert's Rules of Order_ following _in vivo_ testing. 
-
-## Prerequisites
-
-- `uv` https://docs.astral.sh/uv/getting-started/installation/
-
-## Setup
-
-### .env
-
-```dotenv
-ANTHROPIC_API_KEY=abc
-GITLAB_URL=http://gitlab.localhost
-GITLAB_REPOSITORY=def
-OPENBAO_URL=http://gitlab.localhost:8020
-OPENBAO_TOKEN=ghi
-```
-
-### Ollama
-
-```shell
-ollama install llama3.2
-ollama install deepseek-coder-v2
-```
-
-### LangGraph
-
-```shell
-uv add langgraph langsmith langchain_anthropic
-```
-
-### Tools
-
-```shell
-uv add langchain_community duckduckgo-search langchain-ollama python-gitlab docker
-```
-
-### Patch
-
-```shell
-uv add urllib3==1.26.5
-uv add langgraph==0.2.50
-```
-
-# GitLab CE Docker Setup
-
-This guide helps you set up GitLab Community Edition using Docker Compose on Colima.
-
-## Prerequisites
-
-- Colima installed and running
-- Docker and Docker Compose installed
-- At least 4GB of RAM allocated to Colima
-- At least 50GB of disk space
-
-## Setup Steps
-
-1. Start Colima with sufficient resources:
-```bash
-colima start --cpu 4 --memory 8 --disk 50
-```
-
-3. Add GitLab hostname to your hosts file:
-```bash
-sudo echo "127.0.0.1 gitlab.localhost" >> /etc/hosts
-```
-
-4. Start GitLab:
-```bash
-docker-compose up
-```
-
-5. `root` password:
-```bash
-docker-compose exec gitlab grep 'Password:' /etc/gitlab/initial_root_password
-```
-
-## First-time Access
-
-1. Wait for GitLab to start (this may take a few minutes)
-2. Access GitLab at `http://gitlab.localhost`
-3. The first time you visit, you'll be asked to set a password for the root user
-4. Default username is `root`
-
-## Important Notes
-
-- Initial startup may take 5-10 minutes
-- The first password you set will be for the root user
-- SSH is available on port 2224
-- HTTP is available on port 80
-- HTTPS is available on port 443
-
-## Maintenance Commands
-
-Stop GitLab:
-```bash
-docker compose down
-```
-
-Backup GitLab:
-```bash
-docker compose exec gitlab gitlab-backup create
-```
-
-View logs:
-```bash
-docker compose logs -f gitlab
-```
-
-## System Requirements
-
-Minimum recommended specifications for production use:
-- CPU: 4 cores
-- RAM: 8GB
-- Storage: 50GB
-
-## Troubleshooting
-
-If GitLab fails to start:
-1. Check logs: `docker compose logs -f gitlab`
-2. Ensure sufficient system resources
-3. Verify all ports are available
-4. Check file permissions in mounted volumes
-
-For persistent permission issues:
-```bash
-sudo chown -R 998:998 gitlab/
-```
-
-
-Graph
-
-```mermaid
-graph TD
-    %% Current System Structure
-
-    START((START))
-    haiku[haiku]
-    llama[llama]
-    deepseek[deepseek]
-    tools[tools]
-    gitlab[gitlab]
-    secrets[secrets]
-    END((END))
-
+    
     %% Styling
-    classDef default fill:#bbf,stroke:#333,stroke-width:1px;
-    classDef router fill:#f9f,stroke:#333,stroke-width:2px;
-    classDef eend fill:#f96,stroke:#333,stroke-width:2px;
-    classDef sstart fill:#9f9,stroke:#333,stroke-width:2px;
-
-    class START sstart;
-    class END eend;
-    class haiku,llama,deepseek,tools,gitlab,secrets default;
+    classDef auth fill:#f9d,stroke:#333,stroke-width:2px
+    classDef security fill:#ad5,stroke:#333,stroke-width:2px
+    classDef backend fill:#5ad,stroke:#333,stroke-width:2px
+    classDef frontend fill:#da5,stroke:#333,stroke-width:2px
 ```
+
+## 📚 Documentation
+
+For more detailed information about each component:
+
+- [WebApp Documentation](webapp/README.md)
+- [Keycloak Configuration](docs/keycloak.md)
+- [OpenTDF Integration](docs/opentdf.md)
+
+## 🤝 Contributing
+
+Contributions are welcome! Please feel free to submit a Pull Request.
+
+## 📄 License
+
+This project is licensed under the MIT License - see the LICENSE file for details.
+
+## 📞 Contact
+
+Join our [WhatsApp Group](https://chat.whatsapp.com/JFlI9aRvNaGCTU2lOFXpOt) for community support.
