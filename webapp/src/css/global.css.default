@@ -1,0 +1,33 @@
+/* index.css */
+body {
+    margin: 0;
+    padding: 0;
+    font-family: Arial, sans-serif;
+}
+
+* {
+    box-sizing: border-box;
+}
+
+:root {
+    --arkavo-orange: #F4A460;
+    --arkavo-dark-orange: #f99742;
+    --arkavo-dark: #333333;
+    --arkavo-light: #FFFFFF;
+    --arkavo-gray: #CCCCCC;
+    --spacing-xs: 0.25rem;
+    --spacing-sm: 0.5rem;
+    --spacing-md: 1rem;
+    --spacing-lg: 1.5rem;
+    --spacing-xl: 2rem;
+    height: 100vh;
+    width: 100%;
+}
+
+
+#app-container {
+    display: flex;
+    flex-direction: row;
+    width: 100vw;
+    height: 100%;
+}

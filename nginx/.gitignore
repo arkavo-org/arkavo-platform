@@ -1,0 +1,10 @@
+ca.*
+*.pem
+config.ini
+server.crt
+accounts
+certbot*
+ssl
+renewal*
+html
+*.crt

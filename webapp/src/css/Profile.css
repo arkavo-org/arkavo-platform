@@ -1,0 +1,51 @@
+  
+  .profile-container {
+    background-color: #ffffff;
+    border: 1px solid #ddd;
+    border-radius: 8px;
+    width: 100%; /* Slightly wider container */
+    max-width: 800px; /* Maximum width for large screens */
+    height: 100%; /* Allow it to take up most of the viewport height */
+    overflow-y: auto; /* Enable vertical scrolling */
+    padding: 1.5rem;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+  }
+  
+  .profile-container h2 {
+    text-align: center;
+    margin-bottom: 1.5rem;
+    font-family: Arial, sans-serif;
+    color: #333;
+    position: sticky; /* Ensure the title stays visible while scrolling */
+    top: 0;
+    background-color: #ffffff;
+    z-index: 1;
+    padding: 0.5rem 0;
+  }
+  
+  .profile-container ul {
+    padding-left: 1.5rem;
+    margin-bottom: 0.5rem;
+  }
+  
+  .profile-container li {
+    margin-bottom: 0.5rem;
+    font-family: Arial, sans-serif;
+    font-size: 0.9rem;
+    color: #555;
+    word-break: break-word; /* Prevent long strings from overflowing */
+  }
+  
+  .profile-container ul li strong {
+    font-weight: bold;
+    color: #333;
+  }
+  
+  .profile-container img {
+    display: block;
+    margin: 0 auto 1rem;
+    border: 3px solid #ddd;
+    border-radius: 50%;
+    max-width: 100px;
+  }
+  

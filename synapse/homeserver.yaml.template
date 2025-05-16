@@ -1,0 +1,97 @@
+# Configuration file for Synapse.
+#
+# This is a YAML file: see [1] for a quick introduction. Note in particular
+# that *indentation is important*: all the elements of a list or dictionary
+# should have the same indentation.
+#
+# [1] https://docs.ansible.com/ansible/latest/reference_appendices/YAMLSyntax.html
+#
+# For more information on how to configure Synapse, including a complete accounting of
+# each option, go to docs/usage/configuration/config_documentation.md or
+# https://element-hq.github.io/synapse/latest/usage/configuration/config_documentation.html
+server_name: "matrix.$USER_WEBSITE"
+pid_file: /data/homeserver.pid
+
+bind_addresses: ['0.0.0.0']
+federation_port: 8448
+
+# Storage settings
+media_store_path: "/data/media"
+uploads_path: "/data/uploads"
+
+# Log settings
+log_config: "/data/$BRAND_NAME.log.config"
+
+# Federation settings
+federation_domain_whitelist: []
+allow_public_rooms_without_auth: true
+allow_public_rooms_over_federation: true
+enable_user_directory: true
+
+# Room settings
+# encryption_enabled_by_default_for_room_type: "all"
+
+# Rate limiting
+rc_messages_per_second: 0.2
+rc_message_burst_count: 10
+
+# Registration
+enable_registration: false
+registration_requires_token: true
+
+# OIDC Settings
+oidc_providers:
+  - idp_id: keycloak
+    idp_name: "KeyCloak server"
+    issuer: "https://keycloak.$USER_WEBSITE/auth/realms/opentdf"
+    client_id: "synapse"
+    client_secret: "$SYNAPSE_CLIENT_SECRET"
+    scopes: ["openid", "profile"]
+    user_mapping_provider:
+      config:
+        localpart_template: "{{ user.preferred_username }}"
+        display_name_template: "{{ user.name }}"
+        auto_register: true
+        confirm_localpart: false
+    backchannel_logout_enabled: true
+
+# Listeners
+listeners:
+  - port: 8008
+    tls: false
+    type: http
+    x_forwarded: true
+    resources:
+      - names: [client, federation]
+        compress: false
+
+# Database configuration
+database:
+  name: psycopg2
+  args:
+    user: "postgres"
+    password: "changeme"
+    database: "synapse"
+    host: "synapsedb"
+    port: 5432
+    cp_min: 5
+    cp_max: 10
+    
+log_config: "/data/$BRAND_NAME.log.config"
+media_store_path: /data/media_store
+registration_shared_secret: ";puZ#1,lJgoC-_AsCLYSXe_wF;:hMxQ^IHrZMAnq#WyxNWsGSG"
+report_stats: true
+macaroon_secret_key: "FCY*p~51G5x:QT^0UA,N5&E^D*SKnVEWZp.*+ZkAeIhnC@CGNk"
+form_secret: "YgUZiuu-,fNY12QnSF3o6N@KJ3P^OXe*AQzm9sg2e~7~DhrQss"
+signing_key_path: "/data/matrix.$USER_WEBSITE.signing.key"
+trusted_key_servers:
+  - server_name: "matrix.org"
+
+# Report anonymous statistics
+report_stats: false
+
+# vim:ft=yaml
+
+recaptcha_public_key: 6Lc4S7QqAAAAAA55AmAKFHycvEZUIBT0onJ6Rjff
+recaptcha_private_key: 6Lc4S7QqAAAAAH_NGxHoDBFCJywQXIHtvoTX9kiD
+enable_registration_captcha: true

@@ -1,0 +1,14 @@
+certbot certonly \
+  --manual \
+  --preferred-challenges dns \
+  --email "$USER_EMAIL" \
+  --agree-tos \
+  --no-eff-email \
+  --config-dir "$(pwd)/certbot-config" \
+  --work-dir "$(pwd)/certbot-work" \
+  --logs-dir "$(pwd)/certbot-logs" \
+  -d "$USER_WEBSITE" \
+  -d "*.$USER_WEBSITE"
+
+# You have to copy and rename them
+cp /home/julian/Documents/devsecops/certs/certbot-config/archive/app.codecollective.us-0001/*.pem .

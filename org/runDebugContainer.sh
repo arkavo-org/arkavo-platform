@@ -1,0 +1,1 @@
+docker run -it --name org --network codecollective --net=host -v $(pwd)/installs:/go/pkg/mod -v $(pwd):/app -w /app golang:latest bash

@@ -1,0 +1,27 @@
+import { defineConfig } from 'vite';
+import react from '@vitejs/plugin-react';
+
+export default defineConfig(({ command }) => {
+  const isDev = command === 'serve'; // 'serve' means `npm run dev` or `vite dev`
+  //const isBuild = command === 'build'; // 'build' means `npm run build` or `vite build`
+
+  return {
+    plugins: [react()],
+    server: isDev
+      ? {
+          // Apply `allowedHosts` or other dev-only configurations here
+          hmr: false,
+          allowedHosts: [`dev.$USER_WEBSITE`, `$USER_WEBSITE`],
+          host: '0.0.0.0', // Example: Allow connections from any host in dev
+          /*{
+            host: '$USER_WEBSITE', // Use your domain for HMR in production
+            protocol: 'wss', // Secure WebSocket (works with port 443)
+          },*/
+        }
+      : undefined, // No server config in build mode
+    build: {
+      outDir: 'dist', // Build-specific configuration
+      chunkSizeWarningLimit: 1000, // Increase the limit to 1 MB
+    },
+  };
+});

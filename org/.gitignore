@@ -1,0 +1,7 @@
+*.csr
+*.p12
+*.pem
+letsencrypt
+certs
+installs
+tmp

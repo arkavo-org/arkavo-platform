@@ -1,0 +1,501 @@
+events {}
+
+http {
+    resolver 127.0.0.11 valid=30s;
+
+    server {
+        listen 80;
+        server_name $USER_WEBSITE;
+        return 301 https://$host$request_uri;
+    }
+
+    # Default server block to catch undefined subdomains
+    server {
+        listen 80 default_server;
+        listen 443 ssl default_server;
+        server_name _;  # Matches any hostname not defined in other server blocks
+
+        ssl_certificate /keys/fullchain.pem;
+        ssl_certificate_key /keys/privkey.pem;
+
+        return 404;  # Return 404 for undefined subdomains
+    }
+
+    server {
+        listen 443;
+        server_name $USER_WEBSITE;
+
+        include /etc/nginx/mime.types;
+        default_type application/octet-stream;
+        
+        # Add specific MIME type for JavaScript modules
+        types {
+            application/javascript js;
+        }
+
+        ssl_certificate /keys/fullchain.pem;
+        ssl_certificate_key /keys/privkey.pem;
+
+        location / {
+            root /app;
+        }
+
+        # This seperate location is so the no cache policy only applies to the index and nothing else.
+        #location @index {
+        #    root /app;
+        #    add_header Cache-Control no-cache;
+        #    expires 0;
+        #    try_files /index.html /index.html;
+        #}
+    }
+
+
+    server {
+        listen 443 ssl;
+        http2 on;
+
+        server_name $WEBAPP_DEV_BASE_URL;
+
+        ssl_certificate /keys/fullchain.pem;
+        ssl_certificate_key /keys/privkey.pem;
+
+        # Main application
+        location / {
+            
+            set $frontend_upstream "webapp";
+            proxy_pass http://$frontend_upstream:5173;
+            proxy_set_header Host $host;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_next_upstream error timeout invalid_header http_500 http_502 http_503 http_504;
+            proxy_connect_timeout 5s;
+            proxy_read_timeout 60s;
+            proxy_send_timeout 60s;
+
+            # WebSocket headers
+            proxy_set_header Upgrade $http_upgrade;
+            proxy_set_header Connection "upgrade";
+        }
+    }
+
+
+    server {
+        listen 443 ssl;
+        http2 on;
+
+        server_name $BSKY_BRIDGE_BASE_URL;
+
+        ssl_certificate /keys/fullchain.pem;
+        ssl_certificate_key /keys/privkey.pem;
+
+        location / {
+            set $NGINX_BSKY_BRIDGE_UPSTREAM "bsky_bridge";
+            proxy_pass http://$NGINX_BSKY_BRIDGE_UPSTREAM:5000;
+
+            proxy_set_header Host $host;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+
+            add_header Access-Control-Allow-Origin *;
+            add_header Access-Control-Allow-Methods "GET, POST, OPTIONS";
+            add_header Access-Control-Allow-Headers "Authorization, Content-Type";
+
+            if ($request_method = OPTIONS) {
+                add_header Access-Control-Allow-Origin *;
+                add_header Access-Control-Allow-Methods "GET, POST, OPTIONS";
+                add_header Access-Control-Allow-Headers "Authorization, Content-Type";
+                return 204;
+            }
+
+            proxy_next_upstream error timeout invalid_header http_500 http_502 http_503 http_504;
+            proxy_connect_timeout 5s;
+            proxy_read_timeout 60s;
+            proxy_send_timeout 60s;
+        }
+    }
+
+
+    server {
+        listen 443 ssl;
+        http2 on;
+
+        server_name $BSKY_FYP_BASE_URL;
+
+        ssl_certificate /keys/fullchain.pem;
+        ssl_certificate_key /keys/privkey.pem;
+
+        location / {
+            set $NGINX_BSKY_VIDEO_UPSTREAM "bsky_fyp";
+            proxy_pass http://$NGINX_BSKY_VIDEO_UPSTREAM:5000;
+
+            proxy_set_header Host $host;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+
+            add_header Access-Control-Allow-Origin *;
+            add_header Access-Control-Allow-Methods "GET, POST, OPTIONS";
+            add_header Access-Control-Allow-Headers "Authorization, Content-Type";
+
+            if ($request_method = OPTIONS) {
+                add_header Access-Control-Allow-Origin *;
+                add_header Access-Control-Allow-Methods "GET, POST, OPTIONS";
+                add_header Access-Control-Allow-Headers "Authorization, Content-Type";
+                return 204;
+            }
+
+            proxy_next_upstream error timeout invalid_header http_500 http_502 http_503 http_504;
+            proxy_connect_timeout 5s;
+            proxy_read_timeout 60s;
+            proxy_send_timeout 60s;
+        }
+    }
+
+    server {
+        listen 443 ssl;
+        http2 on;
+
+        server_name $OPENTDF_BASE_URL;
+
+        ssl_certificate /keys/fullchain.pem;
+        ssl_certificate_key /keys/privkey.pem;
+
+        location / {
+            set $NGINX_OPENTDF_UPSTREAM "opentdf";
+            proxy_pass http://$NGINX_OPENTDF_UPSTREAM:8080;
+
+            proxy_set_header Host $host;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+
+            add_header Access-Control-Allow-Origin *;
+            add_header Access-Control-Allow-Methods "GET, POST, OPTIONS";
+            add_header Access-Control-Allow-Headers "Authorization, Content-Type, virtru-ntdf-version";
+
+            if ($request_method = OPTIONS) {
+                add_header Access-Control-Allow-Origin *;
+                add_header Access-Control-Allow-Methods "GET, POST, OPTIONS";
+                add_header Access-Control-Allow-Headers "Authorization, Content-Type, virtru-ntdf-version";
+                return 204;
+            }
+
+            proxy_next_upstream error timeout invalid_header http_500 http_502 http_503 http_504;
+            proxy_connect_timeout 5s;
+            proxy_read_timeout 60s;
+            proxy_send_timeout 60s;
+        }
+    }
+
+    server {
+        listen 443 ssl;
+        http2 on;
+
+        server_name $ORG_BASE_URL;
+
+        ssl_certificate /keys/fullchain.pem;
+        ssl_certificate_key /keys/privkey.pem;
+
+        location / {
+            set $NGINX_ORG_UPSTREAM "org";
+            proxy_pass http://$NGINX_ORG_UPSTREAM:8085;
+
+            proxy_set_header Host $host;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_next_upstream error timeout invalid_header http_500 http_502 http_503 http_504;
+            proxy_connect_timeout 5s;
+            proxy_read_timeout 60s;
+            proxy_send_timeout 60s;
+        }
+    }
+
+
+    server {
+        listen 443 ssl;
+        http2 on;
+
+        server_name $INITIATIVE_BASE_URL;
+        client_max_body_size 1G;
+
+        ssl_certificate /keys/fullchain.pem;
+        ssl_certificate_key /keys/privkey.pem;
+
+        location / {
+            set $NGINX_INITIATIVE_UPSTREAM "initiative";
+            proxy_pass http://$NGINX_INITIATIVE_UPSTREAM:8501;
+            proxy_http_version 1.1;
+            proxy_set_header Upgrade $http_upgrade;
+            proxy_set_header Connection "upgrade";
+            proxy_set_header Host $host;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_next_upstream error timeout invalid_header http_500 http_502 http_503 http_504;
+            proxy_connect_timeout 300s;
+            proxy_read_timeout 300s;
+            proxy_send_timeout 300s;
+        }
+
+        location /_stcore/stream {
+            set $NGINX_INITIATIVE_UPSTREAM "initiative";
+            proxy_pass http://$NGINX_INITIATIVE_UPSTREAM:8501;
+            proxy_http_version 1.1;
+            proxy_set_header Upgrade $http_upgrade;
+            proxy_set_header Connection "upgrade";
+            proxy_set_header Host $host;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        }
+    }
+    
+    server {
+        listen 443 ssl;
+        server_name $OLLAMA_BASE_URL;
+
+        ssl_certificate /keys/fullchain.pem;
+        ssl_certificate_key /keys/privkey.pem;
+
+        set $NGINX_OLLAMA_UPSTREAM "ollama";
+
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_hide_header Access-Control-Allow-Origin;
+
+        # Set CORS headers only here
+        add_header Access-Control-Allow-Origin "*" always;
+        add_header Access-Control-Allow-Methods "GET, POST, OPTIONS" always;
+        add_header Access-Control-Allow-Headers "Authorization, Content-Type" always;
+
+        # Allow chat-related API calls
+        location /api/generate {
+            proxy_pass http://$NGINX_OLLAMA_UPSTREAM:11434;
+
+            if ($request_method = OPTIONS) {
+                return 204;
+            }
+        }
+
+        # Allow fetching model tags
+        location /api/tags {
+            proxy_pass http://$NGINX_OLLAMA_UPSTREAM:11434;
+
+            if ($request_method = OPTIONS) {
+                return 204;
+            }
+        }
+
+        # Allow fetching model details
+        location /api/show {
+            proxy_pass http://$NGINX_OLLAMA_UPSTREAM:11434;
+
+            if ($request_method = OPTIONS) {
+                return 204;
+            }
+        }
+
+        # Block everything else from the public internet
+        location / {
+            deny all;
+        }
+    }
+
+
+    server {
+        listen 443 ssl;
+        http2 on;
+
+        server_name $BLUESKY_BASE_URL;
+
+        ssl_certificate /keys/fullchain.pem;
+        ssl_certificate_key /keys/privkey.pem;
+
+        # Main PDS location block for xrpc endpoints
+        location /xrpc/ {
+            set $BLUESKY_UPSTREAM "pds";
+            proxy_pass http://$BLUESKY_UPSTREAM:3000;
+            
+            proxy_http_version 1.1;
+            proxy_set_header Upgrade $http_upgrade;
+            proxy_set_header Connection "upgrade";
+            
+            proxy_set_header Host $host;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $scheme;
+        }
+
+        # Add specific location for atproto-did endpoint
+        location /.well-known/atproto-did {
+            set $BLUESKY_UPSTREAM "pds";
+            proxy_pass http://$BLUESKY_UPSTREAM:3000;
+            proxy_set_header Host $host;
+        }
+
+        location /.well-known/oauth-protected-resource {
+            set $BLUESKY_UPSTREAM "pds";
+            proxy_pass http://$BLUESKY_UPSTREAM:3000;  # Adjust with actual server and port
+            proxy_set_header Host $host;
+        }
+
+        location /.well-known/oauth-authorization-server {
+            set $NGINX_KEYCLOAK_UPSTREAM "keycloak";
+            proxy_pass http://$NGINX_KEYCLOAK_UPSTREAM:8888;  # Proxy to your Keycloak server
+            proxy_set_header Host $host;
+        }
+
+        location /oauth/ {
+            set $NGINX_KEYCLOAK_UPSTREAM "keycloak";
+
+            proxy_pass $KEYCLOAK_HOST;  # Ensure trailing slash
+            proxy_set_header Host $host;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $scheme;
+            proxy_set_header X-Forwarded-Host $host;
+            proxy_set_header X-Forwarded-Port $server_port;
+        }
+    }
+    
+    server {
+
+        listen 443 ssl;
+        http2 on;
+
+        # For the federation port
+        listen 8448 ssl http2 default_server;
+        #listen 8448 ssl http2 default_server;
+        #listen [::]:8448 ssl http2 default_server;
+
+        server_name $SYNAPSE_BASE_URL;
+
+        ssl_certificate /keys/fullchain.pem;
+        ssl_certificate_key /keys/privkey.pem;
+
+        # Set headers for CORS dynamically
+        add_header Access-Control-Allow-Origin "*" always;
+        add_header Access-Control-Allow-Methods "GET, POST, OPTIONS, PUT, DELETE" always;
+        add_header Access-Control-Allow-Headers "Authorization, Content-Type" always;
+        add_header Access-Control-Expose-Headers "Content-Length, Content-Range" always;
+
+        # Suppress headers from the upstream Synapse service
+        proxy_hide_header Access-Control-Allow-Origin;
+        proxy_hide_header Access-Control-Allow-Methods;
+        proxy_hide_header Access-Control-Allow-Headers;
+        proxy_hide_header Access-Control-Expose-Headers;
+
+        # Matrix API - Root location
+        location / {
+            set $NGINX_SYNAPSE_UPSTREAM "synapse";
+
+            proxy_pass http://$NGINX_SYNAPSE_UPSTREAM:8008;
+            proxy_set_header X-Forwarded-For $remote_addr;
+            proxy_set_header X-Forwarded-Proto $scheme;
+            proxy_set_header Host $host;
+            add_header Access-Control-Allow-Origin "*";
+            proxy_set_header X-Forwarded-Proto $scheme;  # Add this line
+
+            # Increase file upload size
+            client_max_body_size 50M;
+
+            # Support chunked responses
+            proxy_http_version 1.1;
+
+            # Handle preflight requests
+            if ($request_method = OPTIONS) {
+                add_header Access-Control-Allow-Methods "GET, POST, OPTIONS, PUT, DELETE";
+                add_header Access-Control-Allow-Headers "Authorization, Content-Type";
+                add_header Content-Type "application/json";
+                return 204;
+            }
+        }
+
+        # Matrix API - Specific location for /_matrix/
+        location /_matrix/ {
+            set $NGINX_SYNAPSE_UPSTREAM "synapse";
+
+            proxy_pass http://$NGINX_SYNAPSE_UPSTREAM:8008;
+            proxy_set_header Host $host;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-Proto $scheme;  # Add this line
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_http_version 1.1;
+            proxy_buffering off;
+
+            # Handle preflight requests
+            if ($request_method = OPTIONS) {
+                add_header Access-Control-Allow-Origin "*";
+                add_header Access-Control-Allow-Methods "GET, POST, OPTIONS, PUT, DELETE";
+                add_header Access-Control-Allow-Headers "Authorization, Content-Type";
+                add_header Content-Type "application/json";
+                return 204;
+            }
+        }
+
+        # Well-known Matrix configuration
+        location /.well-known/matrix/server {
+            default_type application/json;
+            return 200 '{"m.server": "$SYNAPSE_BASE_URL"}';
+        }
+    }
+
+
+
+    server {
+        listen 443 ssl;
+        http2 on;
+
+        server_name $ELEMENT_BASE_URL;
+
+        ssl_certificate /keys/fullchain.pem;
+        ssl_certificate_key /keys/privkey.pem;
+
+        location / {
+            set $NGINX_ELEMENT_UPSTREAM "element";
+            proxy_pass http://$NGINX_ELEMENT_UPSTREAM:80;
+            
+            add_header X-Frame-Options SAMEORIGIN;
+            add_header X-Content-Type-Options nosniff;
+            add_header X-XSS-Protection "1; mode=block";
+            add_header Content-Security-Policy "frame-ancestors 'none'";
+        }
+    }
+
+    server {
+        listen 443 ssl;
+        http2 on;
+
+        server_name $KEYCLOAK_BASE_URL;
+
+        ssl_certificate /keys/fullchain.pem;
+        ssl_certificate_key /keys/privkey.pem;
+
+ 
+        location / {
+            set $NGINX_KEYCLOAK_UPSTREAM "keycloak";
+
+            # Proxy to Keycloak
+            proxy_pass http://$NGINX_KEYCLOAK_UPSTREAM:8888;
+
+            # Add headers
+            proxy_set_header Host $host;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $scheme;
+
+            # Increase buffer size
+            proxy_buffer_size 16k;
+            proxy_buffers 4 32k;
+            proxy_busy_buffers_size 64k;
+
+            # SSL Handling
+            proxy_ssl_server_name on;
+            proxy_ssl_verify off;  # Replace with proper CA trust in production
+
+            # Retry logic and timeouts
+            proxy_next_upstream error timeout invalid_header http_500 http_502 http_503 http_504;
+            proxy_connect_timeout 5s;
+            proxy_read_timeout 60s;
+            proxy_send_timeout 60s;
+        }
+    }
+}
+

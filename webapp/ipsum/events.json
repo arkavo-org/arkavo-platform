@@ -1,0 +1,138 @@
+[
+    {
+        "title": "Building Secure Messaging and AI Infrastructure at an Early-Stage Startup",
+        "description": "An in-depth look at Arkavo’s secure real-time messaging platform and AI infrastructure, including architecture, encryption methods, and DevOps practices for scalability and security.",
+        "category": "Software Development",
+        "date": "2024-11-21",
+        "location": "DevOps Columbia, Columbia, MD",
+        "author": "Paul Flynn",
+        "link": "/forum/events/arkavo-secure-messaging",
+        "speaker_bio": "Paul Flynn is the Founder of Arkavo, a startup focused on building a privacy-first social network. With experience in software development and DevOps, Paul has contributed to projects like OpenTDF and specializes in privacy-enhancing technologies.",
+        "topics": ["Open Source", "DevOps", "Software Development", "Infrastructure as Code", "Information Security"],
+        "attendees": [
+            { "name": "Paul Flynn", "role": "Co-organizer" },
+            { "name": "Judy J.", "role": "Co-organizer" },
+            { "name": "Julian Coy", "role": "Member" },
+            { "name": "Hasan Farook", "role": "Member" },
+            { "name": "Summer Romack", "role": "Member" }
+        ],
+        "likes": 38423,
+        "comments": 852
+    },
+
+    {
+        "title": "Baltimore AGI Meetup",
+        "description": "A gathering for those interested in exploring the potential of Strong AI to transform society. We'll be organizing in Agile fashion to develop revolutionary AI solutions for healthcare, industry, and more.",
+        "category": "Artificial Intelligence",
+        "date": "2024-11-16",
+        "location": "Dear Globe Coffee Roasters, 422 W. Mulberry Street, Baltimore, MD",
+        "author": "Julian Coy",
+        "link": "/forum/events/baltimore-agi-meetup",
+        "agenda": [
+            "1:00PM: Start",
+            "1:15PM: Intro Circle - What is your name and what can AI do for you?",
+            "1:30PM: Presentation TBD"
+        ],
+        "topics": ["Politics", "Social Innovation", "Software Development", "Artificial Intelligence", "Sociology"],
+        "attendees": [
+            { "name": "Julian Coy", "role": "Organizer" },
+            { "name": "Hasan Farook", "role": "Member" },
+            { "name": "Jesse Smith", "role": "Member" },
+            { "name": "Tracy Moore", "role": "Member" },
+            { "name": "Lisa", "role": "Member" }
+        ],
+        "likes": 38423,
+        "comments": 852
+    },
+    {
+        "title": "AI and Ethics Roundtable",
+        "description": "Join us for a thought-provoking discussion on the ethical implications of AI in modern society.",
+        "category": "AI Discussion",
+        "date": "2024-11-15",
+        "location": "Virtual",
+        "author": "Jane Doe",
+        "link": "/forum/discussions/ai-ethics-roundtable"
+    },
+    {
+        "title": "Intro to Web Development Workshop",
+        "description": "An interactive workshop for beginners looking to start their journey in web development.",
+        "category": "Tech Event",
+        "date": "2024-11-17",
+        "location": "Tech Hub, New York",
+        "author": "John Smith",
+        "link": "/forum/events/intro-web-development"
+    },
+    {
+        "title": "Exploring Generative Art",
+        "description": "Dive into the world of generative art and learn how artists are using code to create stunning visuals.",
+        "category": "Art Discussion",
+        "date": "2024-11-20",
+        "location": "Art Collective Studio, San Francisco",
+        "author": "Emily Artiste",
+        "link": "/forum/art/exploring-generative-art"
+    },
+    {
+        "title": "Future of AI in Healthcare",
+        "description": "A panel discussion on how AI is transforming the healthcare industry.",
+        "category": "AI Discussion",
+        "date": "2024-11-22",
+        "location": "Virtual",
+        "author": "Dr. Alan Turing",
+        "link": "/forum/discussions/ai-healthcare"
+    },
+    {
+        "title": "Tech Meetup: Emerging Trends in Cybersecurity",
+        "description": "Network with cybersecurity professionals and learn about the latest in threat detection and prevention.",
+        "category": "Tech Event",
+        "date": "2024-11-25",
+        "location": "Tech Hub, Boston",
+        "author": "CyberSec Group",
+        "link": "/forum/events/cybersecurity-meetup"
+    },
+    {
+        "title": "Art and Code: Coding as a Creative Practice",
+        "description": "Explore how coding has become a medium for artistic expression.",
+        "category": "Art Discussion",
+        "date": "2024-11-28",
+        "location": "Gallery 204, Chicago",
+        "author": "Anna Codes",
+        "link": "/forum/art/coding-creative-practice"
+    },
+    {
+        "title": "AI for Climate Action",
+        "description": "Join us to discuss how AI can contribute to solving environmental issues and combating climate change.",
+        "category": "AI Discussion",
+        "date": "2024-12-01",
+        "location": "Virtual",
+        "author": "EcoTech Forum",
+        "link": "/forum/discussions/ai-climate-action"
+    },
+    {
+        "title": "React.js Beginner Workshop",
+        "description": "Learn the basics of React.js in this hands-on workshop for beginners.",
+        "category": "Tech Event",
+        "date": "2024-12-03",
+        "location": "Virtual",
+        "author": "Code Collective",
+        "link": "/forum/events/reactjs-workshop"
+    },
+    {
+        "title": "Art and Machine Learning: A Collaboration",
+        "description": "Discover how machine learning is being used by artists to create new forms of art.",
+        "category": "Art Discussion",
+        "date": "2024-12-05",
+        "location": "Art Lab, Austin",
+        "author": "Creative AI Society",
+        "link": "/forum/art/machine-learning-art"
+    },
+    {
+        "title": "Blockchain for Social Impact",
+        "description": "A forum on the potential of blockchain technology to address global social issues.",
+        "category": "Tech Event",
+        "date": "2024-12-08",
+        "location": "Tech Innovators HQ, Seattle",
+        "author": "Blockchain Innovators",
+        "link": "/forum/events/blockchain-social-impact"
+    }
+]
+

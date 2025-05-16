@@ -1,0 +1,82 @@
+.feed-container-outer {
+    height: 100vh; /* Full viewport height */
+    overflow-y: scroll;
+    scroll-snap-type: y mandatory; /* Enable snap scrolling */
+    -ms-overflow-style: none; /* Internet Explorer 10+ */
+    scrollbar-width: none; /* Firefox */
+    width: 100%; /* Full width */
+}
+
+/* Hide scrollbar for Safari and Chrome */
+.feed-container-outer::-webkit-scrollbar {
+    display: none;
+}
+
+/* Media query for mobile */
+@media (max-width: 768px) {
+    .feed-container-outer {
+        max-width: 100%; /* Full width on mobile */
+    }
+}
+
+.video-feed-item {
+    height: 100vh; /* Full viewport height */
+    scroll-snap-align: start; /* Snap to the start of each item */
+    position: relative;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    background-color: black; /* Background for inactive videos */
+    transition: filter 0.3s ease;
+}
+
+.video-container {
+    width: 100%;
+    height: 100%;
+    position: relative;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+}
+
+video {
+    width: 100%;
+    height: 100%;
+    object-fit: contain; /* Shrink to fit while maintaining aspect ratio */
+}
+
+.video-overlay {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-start;
+    padding: 1rem;
+    background: linear-gradient(to bottom, rgba(0, 0, 0, 0.6), transparent 60%);
+    color: white;
+    z-index: 1;
+}
+
+.avatar-container {
+    position: absolute;
+    top: 1rem;
+    right: 1rem;
+    width: 50px;
+    height: 50px;
+    border-radius: 50%;
+    overflow: hidden;
+    border: 2px solid white;
+}
+
+.avatar {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+
+.overlay-text {
+    margin-top: 3rem;
+    padding: 1rem;
+}

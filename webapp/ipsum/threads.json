@@ -1,0 +1,103 @@
+[
+
+    {
+        "title": "🎨 SOLD! Abstract Sunrise by DigitalDreamer",
+        "description": "Exciting news! ‘Abstract Sunrise’ by DigitalDreamer has been SOLD! Celebrate with us and check out more of their incredible work.",
+        "category": "Artwork",
+        "date": "2024-11-04",
+        "author": "ArtGallery",
+        "link": "/forum/art/abstract-sunrise-sold",
+        "likes": 300,
+        "comments": 85
+    },
+    {
+        "title": "🎉 Cloudflare and gRPC Solutions Found Together!",
+        "description": "Hey, everyone! Let's solve the Cloudflare and gRPC compatibility issues as a team. Share your experiences, tips, and hacks – let’s crack this together!",
+        "category": "Tech Question",
+        "date": "2024-11-07",
+        "author": "TechWiz22",
+        "link": "/forum/questions/cloudflare-grpc-compatibility",
+        "likes": 120,
+        "replies": 34
+    },
+    {
+        "title": "⭐ Claude Computer: The Game-Changer?",
+        "description": "Anyone here loving their Claude AI computer? Drop your thoughts, pros, and cons! Let's help future buyers make an informed choice.",
+        "category": "AI Product Review",
+        "date": "2024-11-06",
+        "author": "AI_Fanatic",
+        "link": "/forum/reviews/claude-computer-user-review",
+        "likes": 143,
+        "replies": 60
+    },
+    {
+        "title": "🌟 DAE Unemployed? Let’s Boost Each Other Up!",
+        "description": "Struggling in the job hunt? Share your experiences and let’s support each other with tips, advice, and encouragement!",
+        "category": "General Discussion",
+        "date": "2024-11-06",
+        "author": "JobHunter2024",
+        "link": "/forum/discussions/dae-unemployed",
+        "likes": 215,
+        "replies": 78
+    },
+    {
+        "title": "🚀 React State Management Mastery!",
+        "description": "Let’s dive deep into efficient state management in React! Share your favorite techniques and become a state management master!",
+        "category": "Tech Question",
+        "date": "2024-11-05",
+        "author": "ReactGuru",
+        "link": "/forum/questions/react-state-management",
+        "likes": 180,
+        "replies": 55
+    },
+    {
+        "title": "💡 AI Content Moderation: Can It Save the Day?",
+        "description": "What’s your take on AI’s role in moderating content online? Can it balance freedom and safety? Let’s brainstorm solutions!",
+        "category": "AI Discussion",
+        "date": "2024-11-05",
+        "author": "ModBot",
+        "link": "/forum/discussions/ai-content-moderation",
+        "likes": 160,
+        "replies": 40
+    },
+    {
+        "title": "🎨 NEW: ‘Infinite Horizons’ by ArtBot!",
+        "description": "Discover ‘Infinite Horizons,’ a mesmerizing digital art piece exploring surreal landscapes. Perfect for art lovers seeking inspiration!",
+        "category": "Artwork",
+        "date": "2024-11-04",
+        "author": "ArtBot",
+        "link": "/forum/art/infinite-horizons",
+        "likes": 270,
+        "comments": 65
+    },
+    {
+        "title": "🌌 Art & AI: The Perfect Combo?",
+        "description": "Artists and AI enthusiasts, let’s talk! Do you see AI as a powerful tool for creation or a competitor? Let’s celebrate the beauty of tech-meets-art!",
+        "category": "Art and AI Discussion",
+        "date": "2024-11-03",
+        "author": "ArtLover",
+        "link": "/forum/discussions/ai-art-perfect-combo",
+        "likes": 250,
+        "replies": 95
+    },
+    {
+        "title": "🖌️ ‘Celestial Dreams’ Available Now!",
+        "description": "Don’t miss ‘Celestial Dreams,’ a celestial-inspired artwork featuring breathtaking colors and textures. Now up for sale in the gallery!",
+        "category": "Artwork",
+        "date": "2024-11-02",
+        "author": "StarlightStudio",
+        "link": "/forum/art/celestial-dreams",
+        "likes": 210,
+        "comments": 60
+    },
+    {
+        "title": "✨ Is Node.js Still a Must-Have Skill?",
+        "description": "Calling all devs! With so many frameworks around, is Node.js still essential? Let’s weigh in on its relevance and share our views.",
+        "category": "General Tech Discussion",
+        "date": "2024-11-01",
+        "author": "CodeLearner",
+        "link": "/forum/discussions/nodejs-worth-learning",
+        "likes": 240,
+        "replies": 70
+    }
+]

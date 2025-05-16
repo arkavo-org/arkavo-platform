@@ -1,0 +1,19 @@
+#cloud-config
+write_files:
+  - path: /home/ubuntu/install-bluesky.sh
+    permissions: '0755'
+    content: |
+      #!/bin/bash
+      cd /home/ubuntu
+      wget https://raw.githubusercontent.com/bluesky-social/pds/main/installer.sh
+      sudo bash installer.sh
+
+runcmd:
+  - sudo -u ubuntu /home/ubuntu/install-bluesky.sh
+
+package_update: true
+package_upgrade: true
+packages:
+  - wget
+  - curl
+  - git

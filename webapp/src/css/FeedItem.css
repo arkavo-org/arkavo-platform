@@ -1,0 +1,143 @@
+/* Default feed item styling */
+.feed-item {
+    background-color: #1a1a1a; /* Dark background */
+    border: 2px solid #333; /* Dark border */
+    color: #ffffff; /* White text for contrast */
+    border-radius: 8px; /* Slightly larger border radius */
+    padding: 20px; /* Increased padding for better spacing */
+    margin-left: 30%;
+    margin-right: 30%;
+    margin-bottom: 15px; /* More space between items */
+    transition: background-color 0.2s ease, box-shadow 0.2s ease, transform 0.1s ease;
+}
+
+/* Hover effect */
+.feed-item:hover {
+    background-color: #2a2a2a; /* Slightly lighter background on hover */
+    box-shadow: 0 6px 16px rgba(0, 0, 0, 0.3); /* More prominent shadow */
+    transform: translateY(-3px); /* Slightly stronger lift effect */
+    border-color: #444; /* Lighten border on hover */
+}
+
+/* Header styling */
+.feed-item-header {
+    display: flex;
+    align-items: center;
+    font-size: 0.9em;
+    color: #b0b0b0; /* Light gray for less important text */
+    margin-bottom: 10px;
+}
+
+.feed-item-header img {
+    width: 24px; /* Slightly larger image */
+    height: 24px;
+    border-radius: 50%;
+    margin-right: 10px; /* More spacing */
+    border: 1px solid #444; /* Add border to image */
+}
+
+.feed-item-header .author {
+    font-weight: bold;
+    color: #4a90e2; /* Bright blue for author name */
+    margin-right: 6px;
+}
+
+.feed-item-header .separator {
+    margin: 0 6px;
+    color: #666; /* Darker separator */
+}
+
+/* Title styling */
+.feed-item-title {
+    font-size: 1.6em; /* Slightly larger title */
+    font-weight: bold;
+    color: #ffffff; /* White for title */
+    margin-bottom: 12px;
+}
+
+/* Description */
+.feed-item-description {
+    font-size: 1em; /* Slightly larger description */
+    color: #cccccc; /* Light gray for description */
+    margin-bottom: 15px;
+}
+
+/* Action bar */
+.feed-item-actions {
+    display: flex;
+    gap: 20px; /* More spacing between actions */
+    font-size: 0.95em; /* Slightly larger font */
+    color: #b0b0b0; /* Light gray for actions */
+    align-items: center;
+}
+
+.feed-item-actions .action {
+    display: flex;
+    align-items: center;
+    cursor: pointer;
+}
+
+.feed-item-actions .action svg {
+    width: 20px; /* Slightly larger icons */
+    height: 20px;
+    margin-right: 6px; /* More spacing */
+    fill: #b0b0b0; /* Light gray for icons */
+    transition: fill 0.2s;
+}
+
+.feed-item-actions .action:hover svg {
+    fill: #4a90e2; /* Bright blue on hover */
+}
+
+.feed-item-actions .action span {
+    color: #b0b0b0; /* Light gray for text */
+    transition: color 0.2s;
+}
+
+.feed-item-actions .action:hover span {
+    color: #4a90e2; /* Bright blue on hover */
+}
+
+/* Link styling */
+.feed-item a {
+    color: #4a90e2; /* Bright blue for links */
+    font-weight: bold;
+    text-decoration: none;
+    margin-top: 12px;
+    display: inline-block;
+}
+
+.feed-item a:hover {
+    text-decoration: underline;
+}
+
+/* Content image styling */
+.feed-item-content .content-image {
+    word-wrap: break-word;
+    overflow-wrap: break-word;
+    white-space: pre-wrap;
+    display: block;
+    max-width: 90%;
+    height: auto;
+    margin: 0 auto;
+    border-radius: 6px; /* Slightly larger border radius */
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2); /* More prominent shadow */
+    border: 1px solid #444; /* Add border to images */
+}
+
+/* Content text styling */
+.content-text {
+    word-wrap: break-word;
+    color: #ffffff; /* White text for better contrast */
+    overflow-wrap: break-word;
+    white-space: pre-wrap;
+    display: block;
+    max-width: 90%;
+    height: auto;
+    margin: 0 auto;
+    border-radius: 6px; /* Slightly larger border radius */
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2); /* More prominent shadow */
+    padding: 10px; /* Add padding for better readability */
+    background-color: #2a2a2a; /* Slightly lighter background for text */
+    border: 1px solid #444; /* Add border to text content */
+}
