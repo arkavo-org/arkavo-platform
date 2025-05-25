@@ -5,7 +5,7 @@ import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { faBell, faEnvelope, faCalendar, faBullhorn, faPlusCircle } from '@fortawesome/free-solid-svg-icons';
 import './css/Navbar.css';
 import { loginAndFetchProfile, logoutAndClearProfile, UserProfile } from './keycloakUtils';
-import { faLock } from '@fortawesome/free-solid-svg-icons/faLock';
+import { faLock } from "@fortawesome/free-solid-svg-icons";
 
 const Navbar: React.FC = () => {
   const { keycloak, initialized } = useKeycloak(); // Access keycloak from ReactKeycloakProvider

@@ -473,7 +473,7 @@ http {
             set $NGINX_KEYCLOAK_UPSTREAM "keycloak";
 
             # Proxy to Keycloak
-            proxy_pass http://$NGINX_KEYCLOAK_UPSTREAM:8888;
+            proxy_pass https://$NGINX_KEYCLOAK_UPSTREAM:8443;
 
             # Add headers
             proxy_set_header Host $host;

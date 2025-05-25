@@ -255,3 +255,4 @@ webapp/vite.config.ts
 deepseek
 huggingface
 webapp/src/assets/logo.png
+ollama
