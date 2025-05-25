@@ -198,7 +198,6 @@ keycloakdb["volumes"] = {
 keycloak = {
     "name": "keycloak",
     "network": NETWORK_NAME,
-    #"image": "cgr.dev/chainguard/keycloak@sha256:37895558d2e0e93ffff75da5900f9ae7e79ec6d1c390b18b2ecea6cee45ec26f",
     "image": "quay.io/keycloak/keycloak",
     "entrypoint": "/opt/keycloak/keycloak-startup.sh",
     "detach": True,

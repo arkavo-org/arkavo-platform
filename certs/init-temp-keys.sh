@@ -20,7 +20,7 @@ openssl pkcs12 -export -in keys/keycloak-ca.pem -inkey keys/keycloak-ca-private.
 
 chmod -R 777 $hostKeyDir
 
-docker run -v $hostKeyDir:/keys --entrypoint keytool cgr.dev/chainguard/keycloak@sha256:37895558d2e0e93ffff75da5900f9ae7e79ec6d1c390b18b2ecea6cee45ec26f \
+docker run -v $hostKeyDir:/keys --entrypoint keytool quay.io/keycloak/keycloak \
 -importkeystore \
 -srckeystore /keys/ca.p12 \
 -srcstoretype PKCS12 \
