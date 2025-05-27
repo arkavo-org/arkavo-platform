@@ -19,11 +19,15 @@ import env
 print("Applying env var substitutions in hard-coded .template files")
 util.substitutions(here, env)
 util.writeViteEnv(vars(env))
-
+import subprocess
+# Check if the keys directory exists, if not, generate temporary keys for localhost or production keys
 if not os.path.isdir(env.keys_dir):
     if env.USER_WEBSITE == "localhost":
-        os.system("cd certs && ./init-temp-keys.sh")
-        print("Ok - generated temporary keys for localhost")
+        try:
+            subprocess.check_call(["./init-temp-keys.sh"], cwd="certs")
+            print("Ok - generated temporary keys for localhost")
+        except subprocess.CalledProcessError as e:
+            print(f"Error: init-temp-keys.sh failed with code {e.returncode}")
     else:
         utils_docker.generateProdKeys(env)
 
