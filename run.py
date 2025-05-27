@@ -45,7 +45,6 @@ print("Checking if Keycloak keys exist")
 if not os.path.isdir("certs/keys"):
     os.system("cd certs && ./init-temp-keys.sh")
 
-die
 print("Running Keycloak")
 # --- KEYCLOAK ---
 if "keycloak" in env.SERVICES_TO_RUN:
@@ -53,6 +52,7 @@ if "keycloak" in env.SERVICES_TO_RUN:
     utils_docker.wait_for_db(network=env.NETWORK_NAME, db_url="keycloakdb:5432")
     utils_docker.run_container(env.keycloak)
 
+die
 # --- WEB APP ---
 # theoretically has no dependencies
 if "webapp" in env.SERVICES_TO_RUN:
