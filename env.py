@@ -198,7 +198,7 @@ keycloakdb["volumes"] = {
 keycloak = {
     "name": "keycloak",
     "network": NETWORK_NAME,
-    "image": "quay.io/keycloak/keycloak",
+    "image": "keycloak/keycloak:25.0",
     "entrypoint": "/opt/keycloak/keycloak-startup.sh",
     "detach": True,
     "restart_policy": {"Name": "always"},
