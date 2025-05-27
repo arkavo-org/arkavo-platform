@@ -8,6 +8,7 @@ on:
 jobs:
   run-script:
     runs-on: ubuntu-latest
+    timeout-minutes: 30  # ⏱ Set maximum time for job
 
     steps:
       - name: Checkout repository

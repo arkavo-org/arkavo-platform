@@ -297,55 +297,69 @@ def wait_for_url(url, network):
         )
     )
 
+import os
+import docker
+
+DOCKER_CLIENT = docker.from_env()
+here = os.path.dirname(os.path.abspath(__file__))
+import docker
+import textwrap
+
+DOCKER_CLIENT = docker.from_env()
 
 def generateDevKeys(outdir):
-    print("Generating Development Keys with SAN for localhost and nginx")
-    with open(os.path.join("certs", "openssl.config")) as f:
-        openssl_config = f.read()
-    command = (
-        'sh -c "'
-        "ls /certs && "
-        # Install OpenSSL
-        "apk add --no-cache openssl && "
-        # Write OpenSSL config to a temporary file
-        "echo '" + openssl_config.replace("'", "'\\''") + "' > /tmp/openssl.cnf && "
-        # Create CA key
-        "openssl genrsa -out /certs/ca.key 2048 && "
-        # Create CA certificate (self-signed)
-        "openssl req -x509 -new -nodes -key /certs/ca.key -sha256 -days 3650 "
-        "-subj '/C=US/ST=CA/L=Local/O=MyOrg/CN=MyCA' -out /certs/ca.crt && "
-        # Create server key
-        "openssl genrsa -out /certs/privkey.pem 2048 && "
-        # Create CSR for server certificate using the SAN config
-        "openssl req -new -key /certs/privkey.pem -config /tmp/openssl.cnf -out /tmp/server.csr && "
-        # Sign the server CSR with the CA key and certificate
-        "openssl x509 -req -in /tmp/server.csr -CA /certs/ca.crt -CAkey /certs/ca.key -CAcreateserial "
-        "-days 365 -sha256 -extfile /tmp/openssl.cnf -extensions req_ext -out /certs/server.crt && "
-        # Combine server cert and CA cert into a full chain
-        "cat /certs/server.crt /certs/ca.crt > /certs/fullchain.pem && "
-        # Set permissions
-        "chmod 644 /certs/privkey.pem /certs/server.crt /certs/fullchain.pem /certs/ca.crt && "
-        # Combine it with the standard trust store
-        'cat /certs/ca-certificates.crt /certs/ca.crt /keycloak/keys/keycloak-ca.pem /certs/server.crt > /certs/all-ca-certificates.crt"'
-    )
+    print("Generating simple self-signed certificate for NGINX...")
 
-    # Run the container to generate the certificate
+    abs_outdir = os.path.abspath(outdir)
+    print(abs_outdir)
+
+    command = textwrap.dedent("""\
+        apk add --no-cache openssl && \
+        cat <<EOF > /tmp/openssl.cnf
+        [req]
+        default_bits       = 2048
+        prompt             = no
+        default_md         = sha256
+        x509_extensions    = v3_req
+        distinguished_name = dn
+
+        [dn]
+        CN = localhost
+
+        [v3_req]
+        subjectAltName = @alt_names
+
+        [alt_names]
+        DNS.1 = localhost
+        DNS.2 = nginx
+        IP.1 = 127.0.0.1
+        EOF
+        openssl req -x509 -nodes -days 365 -newkey rsa:2048 \
+        -keyout /certs/privkey.pem -out /certs/fullchain.pem \
+        -config /tmp/openssl.cnf -extensions v3_req
+    """)
+
     try:
-        DOCKER_CLIENT.containers.run(
+        container = DOCKER_CLIENT.containers.run(
             image="alpine:latest",
-            name="cert_gen",
-            command=command,
-            volumes={
-                outdir: {"bind": "/certs/", "mode": "rw"},
-                os.path.join(here, "keycloak"): {"bind": "/keycloak/", "mode": "rw"},
-            },
+            name="nginx_cert_gen",
+            command=["sh", "-c", command],
+            volumes={abs_outdir: {"bind": "/certs", "mode": "rw"}},
             remove=False,
-            tty=True,
+            tty=False,
+            detach=True,
         )
-        print("Certificates generated successfully and stored in:", outdir)
-    except Exception as e:
-        print(f"Error generating certificates: {e}")
 
+        result = container.wait()
+        logs = container.logs().decode()
+        print("---- Container Output ----")
+        print(logs)
+        print("--------------------------")
+
+        container.remove()
+        print("✅ Certificates generated at:", abs_outdir)
+    except Exception as e:
+        print(f"❌ Error generating NGINX certificate: {e}")
 
 def generateProdKeys(env):
     #certbot certonly --manual --preferred-challenges dns --email julian@codecollective.us --agree-tos --no-eff-email -d codecollective.us -d *.codecollective.us --config-dir ~/certs/config --work-dir ~/certs/work --logs-dir ~/certs/log
@@ -442,4 +456,4 @@ def pullModels(models_to_pull, network):
             print(f"Model {model_name} already exists locally")
 
 if __name__ == "__main__":
-    generateProdKeys()
+    generateDevKeys('test')
