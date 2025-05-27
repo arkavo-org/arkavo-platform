@@ -15,6 +15,7 @@ util.initializeFiles()
 
 print("Reading env.py")
 import env
+in_github_actions = os.getenv("GITHUB_ACTIONS") == "true"
 
 print("Applying env var substitutions in hard-coded .template files")
 util.substitutions(here, env)
@@ -66,7 +67,7 @@ sys.stdout.flush()  # Force flush in CI environments
 # --- NGINX ---
 if "nginx" in env.SERVICES_TO_RUN:
     if not os.path.isfile("certs/ca.crt"):
-        if env.USER_WEBSITE == "localhost":
+        if env.USER_WEBSITE == "localhost" and not not in_github_actions:
             utils_docker.generateDevKeys(outdir=env.certs_dir)
         else:
             pass
