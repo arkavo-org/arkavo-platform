@@ -35,8 +35,8 @@ if not os.path.isdir(env.keys_dir):
 
 # Convert env.py to a dictionary
 print("Converting env.py to a dictionary")
-die
 config = vars(env)
+die
 # make sure the network is up
 print("Making sure the Docker network is up")
 utils_docker.ensure_network(env.NETWORK_NAME)
