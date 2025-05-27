@@ -22,7 +22,7 @@ util.writeViteEnv(vars(env))
 
 if not os.path.isdir(env.keys_dir):
     if env.USER_WEBSITE == "localhost":
-        os.system("cd certs && ./init-temp-keys.cmd")
+        os.system("cd certs && ./init-temp-keys.sh")
     else:
         utils_docker.generateProdKeys(env)
 
