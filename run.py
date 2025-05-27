@@ -26,8 +26,10 @@ if not os.path.isdir(env.keys_dir):
         try:
             subprocess.check_call(["./init-temp-keys.sh"], cwd="certs")
             print("Ok - generated temporary keys for localhost")
+            sys.stdout.flush()  # Force flush in CI environments
         except subprocess.CalledProcessError as e:
-            print(f"Error: init-temp-keys.sh failed with code {e.returncode}")
+            print(f"Script failed with exit code {e.returncode}")
+            sys.exit(e.returncode)
     else:
         utils_docker.generateProdKeys(env)
 
