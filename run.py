@@ -52,7 +52,8 @@ if "keycloak" in env.SERVICES_TO_RUN:
     utils_docker.wait_for_db(network=env.NETWORK_NAME, db_url="keycloakdb:5432")
     utils_docker.run_container(env.keycloak)
 
-die
+sys.stdout.flush()  # Force flush in CI environments
+
 # --- WEB APP ---
 # theoretically has no dependencies
 if "webapp" in env.SERVICES_TO_RUN:
@@ -60,6 +61,8 @@ if "webapp" in env.SERVICES_TO_RUN:
 if "webapp_build" in env.SERVICES_TO_RUN:
     utils_docker.run_container(env.webapp_build)
 
+sys.stdout.flush()  # Force flush in CI environments
+    
 # --- NGINX ---
 if "nginx" in env.SERVICES_TO_RUN:
     if not os.path.isfile("certs/ca.crt"):
@@ -70,6 +73,8 @@ if "nginx" in env.SERVICES_TO_RUN:
             #utils_docker.generateProdKeys(outdir=env.certs_dir, website=env.USER_WEBSITE)
     utils_docker.run_container(env.nginx)
 
+sys.stdout.flush()  # Force flush in CI environments
+    
 # --- OPENTDF ---
 if "opentdf" in env.SERVICES_TO_RUN:
     utils_docker.run_container(env.opentdfdb)
@@ -78,31 +83,46 @@ if "opentdf" in env.SERVICES_TO_RUN:
     utils_docker.wait_for_url(env.KEYCLOAK_INTERNAL_AUTH_URL, network=env.NETWORK_NAME)
     utils_docker.run_container(env.opentdf)
 
+sys.stdout.flush()  # Force flush in CI environments
+    
 # --- ORG ---
 if "org" in env.SERVICES_TO_RUN:
     utils_docker.run_container(env.org)
 
+sys.stdout.flush()  # Force flush in CI environments
+    
 # --- MATRIX SYNAPSE ---
 if "synapse" in env.SERVICES_TO_RUN:
     utils_docker.run_container(env.synapsedb)
     utils_docker.wait_for_db(network=env.NETWORK_NAME, db_url="synapsedb:5432")
     utils_docker.run_container(env.synapse)
 
+sys.stdout.flush()  # Force flush in CI environments
+    
 if "element" in env.SERVICES_TO_RUN:
     # --- Element web app ---
     utils_docker.run_container(env.element)
 
+sys.stdout.flush()  # Force flush in CI environments
+    
 # --- OLLAMA !!! ---
 if "ollama" in env.SERVICES_TO_RUN:
     utils_docker.run_container(env.ollama)
     utils_docker.pullModels(env.MODELS_TO_PULL,env.NETWORK_NAME)
     utils_docker.run_container(env.deepseek_janus)
 
+sys.stdout.flush()  # Force flush in CI environments
+    
 # --- BLUESKY PDS --- 
 if "bluesky" in env.SERVICES_TO_RUN:
     utils_docker.run_container(env.bluesky)
     utils_docker.run_container(env.bluesky_bridge)
     utils_docker.run_container(env.bsky_fyp)
 
+sys.stdout.flush()  # Force flush in CI environments
+    
 if "sglang" in env.SERVICES_TO_RUN:
     utils_docker.run_container(env.sglang)
+
+sys.stdout.flush()  # Force flush in CI environments
+    
