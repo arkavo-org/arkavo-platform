@@ -23,18 +23,23 @@ util.writeViteEnv(vars(env))
 if not os.path.isdir(env.keys_dir):
     if env.USER_WEBSITE == "localhost":
         os.system("cd certs && ./init-temp-keys.sh")
+        print("Ok - generated temporary keys for localhost")
     else:
         utils_docker.generateProdKeys(env)
 
 # Convert env.py to a dictionary
+print("Converting env.py to a dictionary")
 config = vars(env)
 # make sure the network is up
+print("Making sure the Docker network is up")
 utils_docker.ensure_network(env.NETWORK_NAME)
 
 # create the keycloak keys if they dont exist
+print("Checking if Keycloak keys exist")
 if not os.path.isdir("certs/keys"):
     os.system("cd certs && ./init-temp-keys.sh")
 
+print("Running Keycloak")
 # --- KEYCLOAK ---
 if "keycloak" in env.SERVICES_TO_RUN:
     utils_docker.run_container(env.keycloakdb)
