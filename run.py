@@ -40,12 +40,12 @@ config = vars(env)
 print("Making sure the Docker network is up")
 utils_docker.ensure_network(env.NETWORK_NAME)
 
-die
 # create the keycloak keys if they dont exist
 print("Checking if Keycloak keys exist")
 if not os.path.isdir("certs/keys"):
     os.system("cd certs && ./init-temp-keys.sh")
 
+die
 print("Running Keycloak")
 # --- KEYCLOAK ---
 if "keycloak" in env.SERVICES_TO_RUN:
