@@ -6,8 +6,8 @@ certbot certonly \
   --non-interactive \
   --agree-tos \
   --email julian@codecollective.us \
-  -d app.codecollective \
-  -d *.app.codecollective
+  -d app.$BRAND_NAME \
+  -d *.app.$BRAND_NAME
 
 cp certs/config/live/codecollective.us/*.pem .
 

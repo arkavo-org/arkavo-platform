@@ -10,3 +10,4 @@ html
 *.crt
 nginx.conf
 keys
+config

@@ -253,6 +253,10 @@ http {
         ssl_certificate /keys/fullchain.pem;
         ssl_certificate_key /keys/privkey.pem;
 
+    	# TCP settings
+    	tcp_nodelay on;
+   	tcp_nopush on;
+
         set $NGINX_OLLAMA_UPSTREAM "ollama";
 
         proxy_set_header Host $host;
@@ -267,6 +271,7 @@ http {
 
         # Allow chat-related API calls
         location /api/generate {
+            proxy_buffering off;
             proxy_pass http://$NGINX_OLLAMA_UPSTREAM:11434;
 
             if ($request_method = OPTIONS) {

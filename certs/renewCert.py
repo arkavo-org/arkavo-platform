@@ -7,7 +7,7 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(message)s")
 
 def renew_certificate():
     client = docker.from_env()
-    current_dir = os.path.join(os.getcwd(), "live")
+    current_dir = os.path.join(os.getcwd())
 
     # Ensure the 'live' directory exists in the current directory
     if not os.path.exists(current_dir):
