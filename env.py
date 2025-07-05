@@ -162,15 +162,15 @@ opentdf = dict(
     volumes={
         # f"{certs_dir}/all-ca-certificates.crt": {"bind": "/etc/ssl/certs/ca-certificates.crt", "mode": "ro"},
         f"{opentdf_dir}/opentdf.yaml": {"bind": "/app/opentdf.yaml", "mode": "ro"},
-        f"{keys_dir}/kas-cert.pem": {"bind": "/keys/kas-cert.pem", "mode": "ro"},
-        f"{keys_dir}/kas-ec-cert.pem": {"bind": "/keys/kas-ec-cert.pem", "mode": "ro"},
-        f"{keys_dir}/kas-private.pem": {"bind": "/keys/kas-private.pem", "mode": "ro"},
-        f"{keys_dir}/kas-ec-private.pem": {
+        f"{certs_dir}/kas-cert.pem": {"bind": "/keys/kas-cert.pem", "mode": "ro"},
+        f"{certs_dir}/kas-ec-cert.pem": {"bind": "/keys/kas-ec-cert.pem", "mode": "ro"},
+        f"{certs_dir}/kas-private.pem": {"bind": "/keys/kas-private.pem", "mode": "ro"},
+        f"{certs_dir}/kas-ec-private.pem": {
             "bind": "/keys/kas-ec-private.pem",
             "mode": "ro",
         },
         # f"{keys_dir}/keycloak-ca.pem": {"bind": "/etc/ssl/certs/ca-certificates.crt", "mode": "ro"},
-        f"{keys_dir}/keycloak-ca.pem": {
+        f"{certs_dir}/keycloak-ca.pem": {
             "bind": "/usr/local/share/ca-certificates/ca-certificates.crt",
             "mode": "ro",
         },
