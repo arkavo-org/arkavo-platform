@@ -110,6 +110,8 @@ sys.stdout.flush()  # Force flush in CI environments
 if "ollama" in env.SERVICES_TO_RUN:
     utils_docker.run_container(env.ollama)
     utils_docker.pullModels(env.MODELS_TO_PULL,env.NETWORK_NAME)
+    
+if "deepseekjanus" in env.SERVICES_TO_RUN:
     utils_docker.run_container(env.deepseek_janus)
 
 sys.stdout.flush()  # Force flush in CI environments
@@ -124,6 +126,18 @@ sys.stdout.flush()  # Force flush in CI environments
     
 if "sglang" in env.SERVICES_TO_RUN:
     utils_docker.run_container(env.sglang)
+
+if "gitea" in env.SERVICES_TO_RUN:
+    utils_docker.run_container(env.gitea)
+
+if "whisper" in env.SERVICES_TO_RUN:
+    utils_docker.run_container(env.whisper)
+
+if "mongo" in env.SERVICES_TO_RUN:
+    utils_docker.run_container(env.mongo_db)
+    utils_docker.wait_for_mongo(network=env.NETWORK_NAME, db_url="mongo_db:27017")
+    utils_docker.run_container(env.mongo_api)
+    utils_docker.run_container(env.mongo_studio)
 
 sys.stdout.flush()  # Force flush in CI environments
     

@@ -17,6 +17,7 @@ keycloak_dir = os.path.join(current_dir, "keycloak")
 opentdf_dir = os.path.join(current_dir, "opentdf")
 nginx_dir = os.path.join(current_dir, "nginx")
 webapp_dir = os.path.join(current_dir, "webapp")
+levatel_dir = os.path.join(current_dir, "levatel")
 org_dir = os.path.join(current_dir, "org")
 certs_dir = os.path.join(current_dir, "certs")
 keys_dir = os.path.join(certs_dir, "keys")
@@ -64,6 +65,8 @@ ELEMENT_BASE_URL = "element." + BACKEND_LOCATION
 BSKY_BRIDGE_BASE_URL = "bsky_bridge." + BACKEND_LOCATION
 WEBAPP_DEV_BASE_URL = "dev." + USER_WEBSITE
 INITIATIVE_BASE_URL = "initiative." + BACKEND_LOCATION
+GITEA_BASE_URL = "gitea." + BACKEND_LOCATION
+WHISPER_BASE_URL = "whisper." + BACKEND_LOCATION
 
 KEYCLOAK_HOST = "https://" + KEYCLOAK_BASE_URL
 PROTOCOL_OPENTDF_BASE_URL = "https://" + OPENTDF_BASE_URL
@@ -278,6 +281,10 @@ nginx = dict(
         },
         os.path.join(webapp_dir, "dist"): {
             "bind": "/app",
+            "mode": "rw",
+        },
+        levatel_dir: {
+            "bind": "/levatel",
             "mode": "rw",
         },
         os.path.join(certs_dir, "ssl"): {"bind": "/etc/nginx/ssl", "mode": "rw"},
@@ -598,6 +605,7 @@ bluesky = dict(
 
 
 gitea = dict(
+    name="gitea",
     image="gitea/gitea:latest",
     detach=True,
     network=NETWORK_NAME,
@@ -611,6 +619,7 @@ gitea = dict(
 
 act_runner = dict(
     image="gitea/act_runner:latest",
+    name="act_runner",
     detach=True,
     network=NETWORK_NAME,
     restart="always",
@@ -619,5 +628,91 @@ act_runner = dict(
     environment={
         "GITEA_INSTANCE_URL": "http://gitea:3000",
         "RUNNER_LABELS": "ubuntu-latest:docker://node:16-bullseye",
+    },
+)
+
+whisper_data_dir = os.path.join(current_dir, "whisper")
+
+whisper = dict(
+    image="onerahmet/openai-whisper-asr-webservice:latest",
+    name="whisper",
+    detach=True,
+    network=NETWORK_NAME,
+    restart_policy={"Name": "unless-stopped"},
+    ports={"9000/tcp": 9000},  # Changed from 10300 to 9000
+    environment={
+        "PUID": str(uid),
+        "PGID": str(gid),
+        "TZ": "Etc/UTC",
+        "ASR_MODEL": "base",  # Changed from WHISPER_MODEL
+        "ASR_ENGINE": "faster_whisper",  # Use faster_whisper engine
+        "ASR_DEVICE": "cpu",  # or "cuda" if you have GPU
+        # "MODEL_IDLE_TIMEOUT": "300",  # Optional: unload model after 5 minutes
+    },
+    volumes={
+        whisper_data_dir: {"bind": "/root/.cache", "mode": "rw"},  # Changed mount point
+    },
+)
+
+mongo_db = dict(
+    image="mongo:6",
+    name="mongo_db",
+    network=NETWORK_NAME,
+    restart_policy={"Name": "always"},
+    detach=True,
+    environment={
+        "MONGO_INITDB_ROOT_USERNAME": "admin",
+        "MONGO_INITDB_ROOT_PASSWORD": "password",
+    },
+    command=[
+        "mongod",
+        "--bind_ip_all",
+        "--quiet",
+    ],  # <-- This disables most verbose output
+    volumes={
+        "mongo"
+        + distinguisher: {
+            "bind": "/data/db",
+            "mode": "rw",
+        }
+    },
+    ports={"27017/tcp": 27017},
+    healthcheck={
+        "test": [
+            "CMD-SHELL",
+            "mongosh --eval \"db.adminCommand('ping')\" --username admin --password password --authenticationDatabase admin",
+        ],
+        "interval": 5_000_000_000,
+        "timeout": 5_000_000_000,
+        "retries": 5,
+    },
+)
+
+# REST API over MongoDB using RESTHeart
+mongo_api = dict(
+    image="softinstigate/restheart:latest",
+    name="mongo_api",
+    network=NETWORK_NAME,
+    restart_policy={"Name": "always"},
+    detach=True,
+    ports={"8080/tcp": 8080},
+    environment={
+        "RHO": "/mclient/connection-string->'mongodb://admin:password@mongo_db:27017/?authSource=admin';/http-listener/host->'0.0.0.0'",
+        "RESTHEART_SECURITY_USERNAME": "admin",
+        "RESTHEART_SECURITY_PASSWORD": "password",
+    },
+)
+
+mongo_studio = dict(
+    image="mongo-express:latest",
+    name="mongo_studio",
+    network=NETWORK_NAME,
+    ports={"3001/tcp": 8081},  # Mongo-express runs on 8081 by default
+    restart_policy={"Name": "always"},
+    detach=True,
+    environment={
+        "ME_CONFIG_MONGODB_URL": "mongodb://admin:password@mongo_db:27017",
+        "ME_CONFIG_BASICAUTH_USERNAME": "admin",  # Optional: Web UI login
+        "ME_CONFIG_BASICAUTH_PASSWORD": "admin",  # Optional: Web UI login
     },
 )

@@ -1,0 +1,216 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta http-equiv="Cross-Origin-Opener-Policy" content="same-origin" />
+    <meta http-equiv="Cross-Origin-Embedder-Policy" content="require-corp" />
+    <title>Voice Recording App</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <div class="container">
+      <div class="auth-bar" id="authBar">
+        <div class="auth-info" id="authInfo">
+          <span id="userInfo">Not logged in</span>
+          <button id="loginButton" class="auth-button">Login</button>
+          <button id="logoutButton" class="auth-button hidden">Logout</button>
+          <button id="accountButton" class="auth-button hidden">Account</button>
+        </div>
+      </div>
+
+      <h1>🎤 Voice Chat</h1>
+
+      <button class="mic-button" id="micButton" disabled>🎤</button>
+
+      <div class="status" id="status">Please login to start recording</div>
+
+      <div class="volume-meter">
+        <div class="volume-bar" id="volumeBar"></div>
+      </div>
+
+      <div class="vad-indicator">
+        <div class="vad-light" id="vadLight"></div>
+        <span id="vadStatus">Login to enable Voice Activity Detection</span>
+      </div>
+
+      <div class="settings">
+        <div class="setting-group">
+          <label for="endpoint">API Endpoint:</label>
+          <input
+            type="text"
+            id="endpoint"
+            placeholder="https://your-api.com/voice"
+            value="https://whisper.app.codecollective.us/asr"
+          />
+        </div>
+
+        <div class="setting-group">
+          <label for="language">Language (optional):</label>
+          <select id="language">
+            <option value="">Auto-detect</option>
+            <option value="en">English</option>
+            <option value="es">Spanish</option>
+            <option value="fr">French</option>
+            <option value="de">German</option>
+            <option value="it">Italian</option>
+            <option value="pt">Portuguese</option>
+            <option value="ru">Russian</option>
+            <option value="ja">Japanese</option>
+            <option value="ko">Korean</option>
+            <option value="zh">Chinese</option>
+          </select>
+        </div>
+
+        <div class="setting-group">
+          <label for="task">Task:</label>
+          <select id="task">
+            <option value="transcribe">Transcribe</option>
+            <option value="translate">Translate to English</option>
+          </select>
+        </div>
+
+        <div class="setting-group">
+          <label for="energyThreshold">Energy Threshold:</label>
+          <input
+            type="number"
+            id="energyThreshold"
+            min="0"
+            max="1"
+            step="0.01"
+            value="0.02"
+          />
+        </div>
+
+        <div class="setting-group">
+          <label for="silenceDuration">Silence Duration (ms):</label>
+          <input
+            type="number"
+            id="silenceDuration"
+            min="500"
+            max="5000"
+            value="2000"
+          />
+        </div>
+
+        <div class="setting-group">
+          <label for="minSpeechDuration">Min Speech Duration (ms):</label>
+          <input
+            type="number"
+            id="minSpeechDuration"
+            min="100"
+            max="2000"
+            value="500"
+          />
+        </div>
+      </div>
+
+      <div class="error" id="error"></div>
+
+      <div class="transcription empty" id="transcription">
+        <h3>Transcription:</h3>
+        <div class="transcription-text" id="transcriptionText">
+          Your speech will appear here...
+        </div>
+      </div>
+    </div>
+    <!-- Add this inside <body>, before </body> -->
+    <div class="dashboard-container">
+      <div class="right-panel">
+        <nav class="navbar">
+          <span class="navbar-title">Levatel Dashboard</span>
+          <div class="auth-info">
+            <button id="loginButton" class="auth-button">Login</button>
+            <button id="logoutButton" class="auth-button hidden">Logout</button>
+            <button id="accountButton" class="auth-button hidden">
+              Account
+            </button>
+          </div>
+        </nav>
+
+        <div id="userInfoBox" class="info-box">
+          <h3>User Info</h3>
+          <table id="userInfoTable"></table>
+        </div>
+
+        <div id="servicesBox" class="info-box">
+          <h3>Available Services</h3>
+          <table id="servicesTable"></table>
+        </div>
+
+        <div id="orderBox" class="info-box">
+          <h3>Current Order</h3>
+          <table id="orderTable"></table>
+        </div>
+      </div>
+    </div>
+
+    <script type="module">
+      // Import the functions you need from the SDKs you need
+      import { initializeApp } from "https://www.gstatic.com/firebasejs/11.10.0/firebase-app.js";
+      import { getAnalytics } from "https://www.gstatic.com/firebasejs/11.10.0/firebase-analytics.js";
+      import {
+        getAuth,
+        signInWithPopup,
+        GoogleAuthProvider,
+        signOut,
+      } from "https://www.gstatic.com/firebasejs/11.10.0/firebase-auth.js";
+
+      // Your web app's Firebase configuration
+      const firebaseConfig = {
+        apiKey: "AIzaSyCS457zr9rpyORhefGcfvb4xZwsXXYg0Dc",
+        authDomain: "levatel-d3b77.firebaseapp.com",
+        projectId: "levatel-d3b77",
+        storageBucket: "levatel-d3b77.firebasestorage.app",
+        messagingSenderId: "922786354907",
+        appId: "1:922786354907:web:bc01bf82b626ebc5875efe",
+        measurementId: "G-5Z06BMPY2B",
+      };
+      // Initialize Firebase
+      const app = initializeApp(firebaseConfig);
+      const analytics = getAnalytics(app);
+      const auth = getAuth();
+      const provider = new GoogleAuthProvider();
+
+      // Auth UI handlers
+      document.getElementById("loginButton").addEventListener("click", () => {
+        signInWithPopup(auth, provider).catch((error) => {
+          console.error("Login error:", error);
+          document.getElementById("error").textContent =
+            "Login failed: " + error.message;
+        });
+      });
+
+      document.getElementById("logoutButton").addEventListener("click", () => {
+        signOut(auth).catch((error) => {
+          console.error("Logout error:", error);
+        });
+      });
+
+      // Update UI based on auth state
+      auth.onAuthStateChanged((user) => {
+        const loginBtn = document.getElementById("loginButton");
+        const logoutBtn = document.getElementById("logoutButton");
+        const accountBtn = document.getElementById("accountButton");
+        const userInfo = document.getElementById("userInfo");
+        const micButton = document.getElementById("micButton");
+
+        if (user) {
+          loginBtn.classList.add("hidden");
+          logoutBtn.classList.remove("hidden");
+          accountBtn.classList.remove("hidden");
+          userInfo.textContent = user.email;
+          micButton.disabled = false;
+        } else {
+          loginBtn.classList.remove("hidden");
+          logoutBtn.classList.add("hidden");
+          accountBtn.classList.add("hidden");
+          userInfo.textContent = "Not logged in";
+          micButton.disabled = true;
+        }
+      });
+    </script>
+    <script type="text/javascript" src="./audio.js"></script>
+    <script type="module" src="./data.js"></script>
+  </body>
+</html>

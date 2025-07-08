@@ -114,6 +114,25 @@ http {
         }
     }
 
+    server {
+        listen 443 ssl;
+        server_name levatel.app.codecollective.us;
+
+        include /etc/nginx/mime.types;
+        default_type application/octet-stream;
+
+        types {
+            application/javascript js;
+        }
+
+        ssl_certificate /keys/fullchain.pem;
+        ssl_certificate_key /keys/privkey.pem;
+
+        location / {
+            root /levatel;
+            index index.html;
+        }
+    }
 
     server {
         listen 443 ssl;
@@ -499,6 +518,60 @@ server {
         listen 443 ssl;
         http2 on;
 
+        server_name $GITEA_BASE_URL;
+
+        ssl_certificate /keys/fullchain.pem;
+        ssl_certificate_key /keys/privkey.pem;
+
+        location / {
+            set $NGINX_GITEA_UPSTREAM "gitea";
+            proxy_pass http://$NGINX_GITEA_UPSTREAM:3000;
+            
+            add_header X-Frame-Options SAMEORIGIN;
+            add_header X-Content-Type-Options nosniff;
+            add_header X-XSS-Protection "1; mode=block";
+            add_header Content-Security-Policy "frame-ancestors 'none'";
+        }
+    }
+
+    server {
+        listen 443 ssl;
+        http2 on;
+
+        server_name $WHISPER_BASE_URL;
+
+        ssl_certificate /keys/fullchain.pem;
+        ssl_certificate_key /keys/privkey.pem;
+
+        location / {
+            set $NGINX_WHISPER_UPSTREAM "whisper";
+            proxy_pass http://$NGINX_WHISPER_UPSTREAM:9000;
+            
+            # Security Headers
+            add_header X-Frame-Options SAMEORIGIN always;
+            add_header X-Content-Type-Options nosniff always;
+            add_header X-XSS-Protection "1; mode=block" always;
+            add_header Content-Security-Policy "frame-ancestors 'none'" always;
+
+            # CORS Headers
+            add_header Access-Control-Allow-Origin * always;
+            add_header Access-Control-Allow-Methods 'GET, POST, OPTIONS' always;
+            add_header Access-Control-Allow-Headers 'Content-Type, Authorization' always;
+
+            # Handle OPTIONS requests
+            if ($request_method = OPTIONS) {
+                add_header Access-Control-Max-Age 1728000;
+                add_header Content-Type 'text/plain charset=UTF-8';
+                add_header Content-Length 0;
+                return 204;
+            }
+        }
+    }
+
+    server {
+        listen 443 ssl;
+        http2 on;
+
         server_name $KEYCLOAK_BASE_URL;
 
         ssl_certificate /keys/fullchain.pem;
@@ -533,5 +606,70 @@ server {
             proxy_send_timeout 60s;
         }
     }
+    server {
+        listen 443 ssl;
+        http2 on;
+
+        server_name mongo_api.$USER_WEBSITE;
+
+        ssl_certificate /keys/fullchain.pem;
+        ssl_certificate_key /keys/privkey.pem;
+
+        # Preflight handler
+        location / {
+            if ($request_method = OPTIONS) {
+                add_header 'Access-Control-Allow-Origin' 'https://levatel.app.codecollective.us' always;
+                add_header 'Access-Control-Allow-Methods' 'GET, POST, PUT, DELETE, OPTIONS' always;
+                add_header 'Access-Control-Allow-Headers' 'Authorization, Content-Type' always;
+                add_header 'Access-Control-Allow-Credentials' 'true' always;
+                add_header 'Content-Length' 0;
+                add_header 'Content-Type' 'text/plain';
+                return 204;
+            }
+
+            set $MONGO_API_UPSTREAM "mongo_api";
+            proxy_pass http://$MONGO_API_UPSTREAM:8080;
+
+            proxy_http_version 1.1;
+
+            proxy_set_header Host $host;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $scheme;
+            proxy_set_header Authorization $http_authorization;
+
+            # Ensure CORS headers on actual responses too
+            add_header 'Access-Control-Allow-Methods' 'GET, POST, PUT, DELETE, OPTIONS' always;
+            add_header 'Access-Control-Allow-Headers' 'Authorization, Content-Type' always;
+            add_header 'Access-Control-Allow-Credentials' 'true' always;
+        }
+    }
+
+
+
+
+    server {
+        listen 443 ssl;
+        http2 on;
+
+        server_name mongo-studio.$USER_WEBSITE;
+
+        ssl_certificate /keys/fullchain.pem;
+        ssl_certificate_key /keys/privkey.pem;
+
+        location / {
+            set $MONGO_STUDIO_UPSTREAM "mongo_studio";
+            proxy_pass http://$MONGO_STUDIO_UPSTREAM:8081;
+
+            proxy_http_version 1.1;
+            proxy_set_header Host $host;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $scheme;
+
+            add_header Access-Control-Allow-Origin * always;
+        }
+    }
+
 }
 
