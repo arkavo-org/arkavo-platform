@@ -113,26 +113,30 @@ http {
             proxy_send_timeout 60s;
         }
     }
+server {
+    listen 443 ssl;
+    server_name levatel.app.codecollective.us;
 
-    server {
-        listen 443 ssl;
-        server_name levatel.app.codecollective.us;
+    include /etc/nginx/mime.types;
+    default_type application/octet-stream;
 
-        include /etc/nginx/mime.types;
-        default_type application/octet-stream;
-
-        types {
-            application/javascript js;
-        }
-
-        ssl_certificate /keys/fullchain.pem;
-        ssl_certificate_key /keys/privkey.pem;
-
-        location / {
-            root /levatel;
-            index index.html;
-        }
+    types {
+        application/javascript js;
     }
+
+    ssl_certificate /keys/fullchain.pem;
+    ssl_certificate_key /keys/privkey.pem;
+
+    location / {
+        root /levatel;
+        index index.html;
+
+        # Disable caching
+        add_header Cache-Control "no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0" always;
+        add_header Pragma "no-cache" always;
+        add_header Expires "0" always;
+    }
+}
 
     server {
         listen 443 ssl;
@@ -322,32 +326,31 @@ http {
         }
     }
 
-server {
-    listen 443 ssl;
-    http2 on;
+    server {
+        listen 443 ssl;
+        http2 on;
 
-    server_name echo.app.codecollective.us;
-    client_max_body_size 1G;
+        server_name echo.app.codecollective.us;
+        client_max_body_size 1G;
 
-    ssl_certificate /keys/fullchain.pem;
-    ssl_certificate_key /keys/privkey.pem;
+        ssl_certificate /keys/fullchain.pem;
+        ssl_certificate_key /keys/privkey.pem;
 
-    location / {
-        set $NGINX_ECHO_UPSTREAM "echo";
-        proxy_pass http://$NGINX_ECHO_UPSTREAM:8080;
-        proxy_http_version 1.1;
-        proxy_set_header Upgrade $http_upgrade;
-        proxy_set_header Connection "upgrade";
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_next_upstream error timeout invalid_header http_500 http_502 http_503 http_504;
-        proxy_connect_timeout 300s;
-        proxy_read_timeout 300s;
-        proxy_send_timeout 300s;
+        location / {
+            set $NGINX_ECHO_UPSTREAM "echo";
+            proxy_pass http://$NGINX_ECHO_UPSTREAM:8080;
+            proxy_http_version 1.1;
+            proxy_set_header Upgrade $http_upgrade;
+            proxy_set_header Connection "upgrade";
+            proxy_set_header Host $host;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_next_upstream error timeout invalid_header http_500 http_502 http_503 http_504;
+            proxy_connect_timeout 300s;
+            proxy_read_timeout 300s;
+            proxy_send_timeout 300s;
+        }
     }
-}
-
 
     server {
         listen 443 ssl;

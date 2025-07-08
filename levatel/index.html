@@ -7,101 +7,147 @@
     <meta http-equiv="Cross-Origin-Embedder-Policy" content="require-corp" />
     <title>Voice Recording App</title>
     <link rel="stylesheet" href="styles.css" />
+    <link rel="stylesheet" href="https://codecollective.us/css/master.css" />
   </head>
   <body>
-    <div class="container">
-      <div class="auth-bar" id="authBar">
-        <div class="auth-info" id="authInfo">
-          <span id="userInfo">Not logged in</span>
-          <button id="loginButton" class="auth-button">Login</button>
-          <button id="logoutButton" class="auth-button hidden">Logout</button>
-          <button id="accountButton" class="auth-button hidden">Account</button>
+    <div class="levatel-vert-container">
+      <nav class="main-nav-bar" aria-label="Main Navigation">
+        <div class="navbar dark-mode">
+          <div class="nav-links">
+            <a href="/#main">Home</a>
+            <a href="/balticonomy/">Balticonomy</a>
+            <a href="/#get-involved">Join Us</a>
+            <a href="/#about-us">About Us</a>
+            <div class="auth-dropdown" id="authDropdown">
+              <button class="auth-toggle" id="authToggle">
+                <img
+                  src="/path/to/default-profile.png"
+                  alt="Profile"
+                  class="profile-pic"
+                />
+                <span id="userInfo">Not logged in</span>
+              </button>
+              <div class="auth-menu hidden" id="authMenu">
+                <button id="loginButton" class="auth-button">Login</button>
+                <button id="accountButton" class="auth-button hidden">
+                  Account
+                </button>
+                <button id="logoutButton" class="auth-button hidden">
+                  Logout
+                </button>
+              </div>
+            </div>
+          </div>
         </div>
-      </div>
+      </nav>
 
-      <h1>🎤 Voice Chat</h1>
+      <div class="levatel-horiz-container">
+        <div class="levatel-vert-container">
+          <h1>🎤 Voice Chat</h1>
 
-      <button class="mic-button" id="micButton" disabled>🎤</button>
+          <button class="mic-button" id="micButton" disabled>🎤</button>
 
-      <div class="status" id="status">Please login to start recording</div>
+          <div class="status" id="status">Please login to start recording</div>
 
-      <div class="volume-meter">
-        <div class="volume-bar" id="volumeBar"></div>
-      </div>
+          <div class="volume-meter">
+            <div class="volume-bar" id="volumeBar"></div>
+          </div>
 
-      <div class="vad-indicator">
-        <div class="vad-light" id="vadLight"></div>
-        <span id="vadStatus">Login to enable Voice Activity Detection</span>
-      </div>
+          <div class="vad-indicator">
+            <div class="vad-light" id="vadLight"></div>
+            <span id="vadStatus">Login to enable Voice Activity Detection</span>
+          </div>
 
-      <div class="settings">
-        <div class="setting-group">
-          <label for="endpoint">API Endpoint:</label>
-          <input
-            type="text"
-            id="endpoint"
-            placeholder="https://your-api.com/voice"
-            value="https://whisper.app.codecollective.us/asr"
-          />
+          <div class="settings">
+            <div class="setting-group">
+              <label for="endpoint">API Endpoint:</label>
+              <input
+                type="text"
+                id="endpoint"
+                placeholder="https://your-api.com/voice"
+                value="https://whisper.app.codecollective.us/asr"
+              />
+            </div>
+
+            <div class="setting-group">
+              <label for="language">Language (optional):</label>
+              <select id="language">
+                <option value="">Auto-detect</option>
+                <option value="en">English</option>
+                <option value="es">Spanish</option>
+                <option value="fr">French</option>
+                <option value="de">German</option>
+                <option value="it">Italian</option>
+                <option value="pt">Portuguese</option>
+                <option value="ru">Russian</option>
+                <option value="ja">Japanese</option>
+                <option value="ko">Korean</option>
+                <option value="zh">Chinese</option>
+              </select>
+            </div>
+
+            <div class="setting-group">
+              <label for="task">Task:</label>
+              <select id="task">
+                <option value="transcribe">Transcribe</option>
+                <option value="translate">Translate to English</option>
+              </select>
+            </div>
+
+            <div class="setting-group">
+              <label for="energyThreshold">Energy Threshold:</label>
+              <input
+                type="number"
+                id="energyThreshold"
+                min="0"
+                max="1"
+                step="0.01"
+                value="0.02"
+              />
+            </div>
+
+            <div class="setting-group">
+              <label for="silenceDuration">Silence Duration (ms):</label>
+              <input
+                type="number"
+                id="silenceDuration"
+                min="500"
+                max="5000"
+                value="2000"
+              />
+            </div>
+
+            <div class="setting-group">
+              <label for="minSpeechDuration">Min Speech Duration (ms):</label>
+              <input
+                type="number"
+                id="minSpeechDuration"
+                min="100"
+                max="2000"
+                value="500"
+              />
+            </div>
+          </div>
         </div>
 
-        <div class="setting-group">
-          <label for="language">Language (optional):</label>
-          <select id="language">
-            <option value="">Auto-detect</option>
-            <option value="en">English</option>
-            <option value="es">Spanish</option>
-            <option value="fr">French</option>
-            <option value="de">German</option>
-            <option value="it">Italian</option>
-            <option value="pt">Portuguese</option>
-            <option value="ru">Russian</option>
-            <option value="ja">Japanese</option>
-            <option value="ko">Korean</option>
-            <option value="zh">Chinese</option>
-          </select>
-        </div>
+        <!-- Add this inside <body>, before </body> -->
+        <div class="dashboard-container">
+          <div class="right-panel">
+            <div id="userInfoBox" class="info-box">
+              <h3>User Info</h3>
+              <table id="userInfoTable"></table>
+            </div>
 
-        <div class="setting-group">
-          <label for="task">Task:</label>
-          <select id="task">
-            <option value="transcribe">Transcribe</option>
-            <option value="translate">Translate to English</option>
-          </select>
-        </div>
+            <div id="servicesBox" class="info-box">
+              <h3>Available Services</h3>
+              <table id="servicesTable"></table>
+            </div>
 
-        <div class="setting-group">
-          <label for="energyThreshold">Energy Threshold:</label>
-          <input
-            type="number"
-            id="energyThreshold"
-            min="0"
-            max="1"
-            step="0.01"
-            value="0.02"
-          />
-        </div>
-
-        <div class="setting-group">
-          <label for="silenceDuration">Silence Duration (ms):</label>
-          <input
-            type="number"
-            id="silenceDuration"
-            min="500"
-            max="5000"
-            value="2000"
-          />
-        </div>
-
-        <div class="setting-group">
-          <label for="minSpeechDuration">Min Speech Duration (ms):</label>
-          <input
-            type="number"
-            id="minSpeechDuration"
-            min="100"
-            max="2000"
-            value="500"
-          />
+            <div id="orderBox" class="info-box">
+              <h3>Current Order</h3>
+              <table id="orderTable"></table>
+            </div>
+          </div>
         </div>
       </div>
 
@@ -111,36 +157,6 @@
         <h3>Transcription:</h3>
         <div class="transcription-text" id="transcriptionText">
           Your speech will appear here...
-        </div>
-      </div>
-    </div>
-    <!-- Add this inside <body>, before </body> -->
-    <div class="dashboard-container">
-      <div class="right-panel">
-        <nav class="navbar">
-          <span class="navbar-title">Levatel Dashboard</span>
-          <div class="auth-info">
-            <button id="loginButton" class="auth-button">Login</button>
-            <button id="logoutButton" class="auth-button hidden">Logout</button>
-            <button id="accountButton" class="auth-button hidden">
-              Account
-            </button>
-          </div>
-        </nav>
-
-        <div id="userInfoBox" class="info-box">
-          <h3>User Info</h3>
-          <table id="userInfoTable"></table>
-        </div>
-
-        <div id="servicesBox" class="info-box">
-          <h3>Available Services</h3>
-          <table id="servicesTable"></table>
-        </div>
-
-        <div id="orderBox" class="info-box">
-          <h3>Current Order</h3>
-          <table id="orderTable"></table>
         </div>
       </div>
     </div>
