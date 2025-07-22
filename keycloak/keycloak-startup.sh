@@ -35,4 +35,4 @@ cp /opt/keycloak/realms/*.json "$KEYCLOAK_IMPORT_DIR/"
 
 # Start Keycloak with import-realm flag
 echo "Starting Keycloak with import-realm flag..."
-exec /opt/keycloak/bin/kc.sh start --import-realm --verbose
+exec /opt/keycloak/bin/kc.sh start --db=postgres --import-realm --verbose

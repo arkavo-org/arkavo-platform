@@ -1,4 +1,5 @@
 #!/bin/bash
+set -e
 
 # Set variables
 CONTAINER_NAME="keycloak"
@@ -15,6 +16,8 @@ docker exec -it $CONTAINER_NAME /opt/keycloak/bin/kc.sh export \
     --dir $EXPORT_DIR \
     --realm $REALM_NAME \
     --users skip
+
+exit
 
 docker exec -it keycloak /opt/keycloak/bin/kc.sh export --dir /opt/keycloak/data/export --realm opentdf --users different_files
 

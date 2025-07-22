@@ -91,6 +91,7 @@ KEYCLOAK_INTERNAL_CHECK_ADDR = f"https://{KEYCLOAK_INTERNAL_URL}"
 KEYCLOAK_INTERNAL_AUTH_URL = f"{KEYCLOAK_HOST}/auth"
 VITE_KEYCLOAK_SERVER_URL = KEYCLOAK_HOST + "/auth"
 
+KEYCLOAK_IMAGE = "keycloak/keycloak:25.0"
 KEYCLOAK_AUTH_URL = KEYCLOAK_HOST + "/auth"
 VITE_KEYCLOAK_AUTH_ENDPOINT = (
     f"{KEYCLOAK_HOST}/auth/realms/{KEYCLOAK_REALM}/protocol/openid-connect/auth"
@@ -124,6 +125,8 @@ KEYCLOAK_REDIRECT_URI = f"{VITE_KEYCLOAK_REDIRECT_URI}"
 VITE_ORG_BACKEND_URL = "https://localhost/org"
 VITE_FRONTEND_SERVER_URL = f"https://{VITE_PUBLIC_URL}"
 
+POSTGRES_USER = "postgres"
+
 # Opentdf config
 opentdfdb = dict(
     image="postgres:15-alpine",
@@ -133,8 +136,8 @@ opentdfdb = dict(
     restart_policy={"Name": "always"},
     user="postgres",
     environment={
-        "POSTGRES_PASSWORD": "changeme",
-        "POSTGRES_USER": "postgres",
+        "POSTGRES_PASSWORD": POSTGRES_PASSWORD,
+        "POSTGRES_USER": POSTGRES_USER,
         "POSTGRES_DB": "opentdf",
     },
     volumes={
@@ -191,8 +194,9 @@ opentdf = dict(
 
 # Keycloak config
 keycloakdb = copy.deepcopy(opentdfdb)
+keycloak_dbname = "keycloak"
 keycloakdb["name"] = "keycloakdb"
-keycloakdb["environment"]["POSTGRES_DB"] = "keycloak"
+keycloakdb["environment"]["POSTGRES_DB"] = keycloak_dbname
 keycloakdb["volumes"] = {
     "KEYCLOAK_POSTGRES"
     + distinguisher: {"bind": "/var/lib/postgresql/data", "mode": "rw"}
@@ -201,7 +205,7 @@ keycloakdb["volumes"] = {
 keycloak = {
     "name": "keycloak",
     "network": NETWORK_NAME,
-    "image": "keycloak/keycloak:25.0",
+    "image": KEYCLOAK_IMAGE,
     "entrypoint": "/opt/keycloak/keycloak-startup.sh",
     "detach": True,
     "restart_policy": {"Name": "always"},
@@ -242,9 +246,9 @@ keycloak = {
         "KC_DB_VENDOR": "postgres",
         "KC_DB_URL_HOST": "keycloakdb",
         "KC_DB_URL_PORT": "5432",
-        "KC_DB_URL_DATABASE": "keycloak",
-        "KC_DB_USERNAME": "keycloak",
-        "KC_DB_PASSWORD": "changeme",
+        "KC_DB_URL_DATABASE": keycloak_dbname,
+        "KC_DB_USERNAME": POSTGRES_USER,
+        "KC_DB_PASSWORD": POSTGRES_PASSWORD,
         "KC_HOSTNAME_STRICT": "false",
         "KC_HOSTNAME_STRICT_BACKCHANNEL": "false",
         "KC_HOSTNAME_STRICT_HTTPS": "false",
