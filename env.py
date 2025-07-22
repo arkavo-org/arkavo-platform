@@ -17,7 +17,7 @@ keycloak_dir = os.path.join(current_dir, "keycloak")
 opentdf_dir = os.path.join(current_dir, "opentdf")
 nginx_dir = os.path.join(current_dir, "nginx")
 webapp_dir = os.path.join(current_dir, "webapp")
-levatel_dir = os.path.join(current_dir, "levatel")
+levatel_dir = os.path.join(current_dir, "..", "CodeCollective")
 org_dir = os.path.join(current_dir, "org")
 certs_dir = os.path.join(current_dir, "certs")
 keys_dir = os.path.join(certs_dir, "keys")
@@ -284,7 +284,7 @@ nginx = dict(
             "mode": "rw",
         },
         levatel_dir: {
-            "bind": "/levatel",
+            "bind": "/cc",
             "mode": "rw",
         },
         os.path.join(certs_dir, "ssl"): {"bind": "/etc/nginx/ssl", "mode": "rw"},
@@ -687,6 +687,22 @@ mongo_db = dict(
         "retries": 5,
     },
 )
+
+libretranslate = dict(
+    image="libretranslate/libretranslate",
+    name="libretranslate",
+    network=NETWORK_NAME,
+    restart_policy={"Name": "always"},
+    detach=True,
+    ports={"5000/tcp": 5000},
+    volumes={
+        os.path.join(current_dir, "/libretranslate"): {
+            "bind": "/home/libretranslate/.local/share/argos-translate/packages",
+            "mode": "rw",
+        }
+    }
+)
+
 
 # REST API over MongoDB using RESTHeart
 mongo_api = dict(

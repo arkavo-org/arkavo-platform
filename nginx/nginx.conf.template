@@ -113,30 +113,31 @@ http {
             proxy_send_timeout 60s;
         }
     }
-server {
-    listen 443 ssl;
-    server_name levatel.app.codecollective.us;
 
-    include /etc/nginx/mime.types;
-    default_type application/octet-stream;
+    server {
+        listen 443 ssl;
+        server_name cc.app.codecollective.us;
 
-    types {
-        application/javascript js;
+        include /etc/nginx/mime.types;
+        default_type application/octet-stream;
+
+        types {
+            application/javascript js;
+        }
+
+        ssl_certificate /keys/fullchain.pem;
+        ssl_certificate_key /keys/privkey.pem;
+
+        location / {
+            root /cc;
+            index index.html;
+
+            # Disable caching
+            add_header Cache-Control "no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0" always;
+            add_header Pragma "no-cache" always;
+            add_header Expires "0" always;
+        }
     }
-
-    ssl_certificate /keys/fullchain.pem;
-    ssl_certificate_key /keys/privkey.pem;
-
-    location / {
-        root /levatel;
-        index index.html;
-
-        # Disable caching
-        add_header Cache-Control "no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0" always;
-        add_header Pragma "no-cache" always;
-        add_header Expires "0" always;
-    }
-}
 
     server {
         listen 443 ssl;
@@ -529,7 +530,7 @@ server {
         location / {
             set $NGINX_GITEA_UPSTREAM "gitea";
             proxy_pass http://$NGINX_GITEA_UPSTREAM:3000;
-            
+            client_max_body_size 500M;         # increase this
             add_header X-Frame-Options SAMEORIGIN;
             add_header X-Content-Type-Options nosniff;
             add_header X-XSS-Protection "1; mode=block";

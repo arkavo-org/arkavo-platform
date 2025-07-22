@@ -256,3 +256,4 @@ deepseek
 huggingface
 webapp/src/assets/logo.png
 ollama
+libretranslate/*

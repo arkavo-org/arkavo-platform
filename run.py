@@ -139,5 +139,8 @@ if "mongo" in env.SERVICES_TO_RUN:
     utils_docker.run_container(env.mongo_api)
     utils_docker.run_container(env.mongo_studio)
 
+if "libretranslate" in env.SERVICES_TO_RUN:
+    utils_docker.run_container(env.libretranslate)
+
 sys.stdout.flush()  # Force flush in CI environments
     
