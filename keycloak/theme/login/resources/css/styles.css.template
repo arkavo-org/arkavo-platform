@@ -5,7 +5,7 @@
 /* Defaults */
 
 body {
-    background-color: #002a61 !important;
+    background-color: $BRAND_COLOR_DARK !important;
   }
 
 .pf-v5-c-login__container {

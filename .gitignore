@@ -257,3 +257,4 @@ huggingface
 webapp/src/assets/logo.png
 ollama
 libretranslate/*
+keycloak/theme/login/template.ftl

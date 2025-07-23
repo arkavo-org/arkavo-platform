@@ -67,6 +67,7 @@ WEBAPP_DEV_BASE_URL = "dev." + USER_WEBSITE
 INITIATIVE_BASE_URL = "initiative." + BACKEND_LOCATION
 GITEA_BASE_URL = "gitea." + BACKEND_LOCATION
 WHISPER_BASE_URL = "whisper." + BACKEND_LOCATION
+USERS_BASE_URL = "users." + BACKEND_LOCATION
 
 KEYCLOAK_HOST = "https://" + KEYCLOAK_BASE_URL
 PROTOCOL_OPENTDF_BASE_URL = "https://" + OPENTDF_BASE_URL
@@ -191,6 +192,15 @@ opentdf = dict(
     },
 )
 
+
+# Keycloak config
+usersdb = copy.deepcopy(opentdfdb)
+keycloak_dbname = "users"
+usersdb["name"] = "usersdb"
+usersdb["environment"]["POSTGRES_DB"] = keycloak_dbname
+usersdb["volumes"] = {
+    "users_postgres" + distinguisher: {"bind": "/var/lib/postgresql/data", "mode": "rw"}
+}
 
 # Keycloak config
 keycloakdb = copy.deepcopy(opentdfdb)
@@ -735,4 +745,12 @@ mongo_studio = dict(
         "ME_CONFIG_BASICAUTH_USERNAME": "admin",  # Optional: Web UI login
         "ME_CONFIG_BASICAUTH_PASSWORD": "admin",  # Optional: Web UI login
     },
+)
+
+users_api = dict(
+    image="users-api",
+    name="users",
+    network="codecollective",
+    restart_policy={"Name": "always"},
+    detach=True,
 )

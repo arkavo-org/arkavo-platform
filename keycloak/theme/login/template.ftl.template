@@ -12,7 +12,7 @@
             <meta name="${meta?split('==')[0]}" content="${meta?split('==')[1]}"/>
         </#list>    
     </#if>
-    <title>${msg("loginTitle",($BRAND_NAME!''))}</title>
+    <title>${msg("loginTitle",('$VITE_BRAND_NAME!'))}</title>
     <link rel="icon" href="${url.resourcesPath}/img/logo.png" />
     <#if properties.stylesCommon?has_content>
         <#list properties.stylesCommon?split(' ') as style>
@@ -57,7 +57,7 @@
 <body id="keycloak-bg" class="${properties.kcBodyClass!}">
 <div id="kc-header" class="${properties.kcHeaderClass!}">
     <div id="kc-header-wrapper"
-             class="${properties.kcHeaderWrapperClass!}">${kcSanitize(msg("loginTitleHtml",($BRAND_NAME!'Your Brand')))?no_esc}</div>
+             class="${properties.kcHeaderWrapperClass!}">${kcSanitize(msg("loginTitleHtml",(BRAND_NAME!'$VITE_BRAND_NAME')))?no_esc}</div>
     </div>
 </div>
 <div class="pf-v5-c-login"
