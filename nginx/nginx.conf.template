@@ -262,9 +262,38 @@ http {
         http2 on;
 
         server_name $USERS_BASE_URL;
+        client_max_body_size 10M;
 
         ssl_certificate /keys/fullchain.pem;
         ssl_certificate_key /keys/privkey.pem;
+
+        location /ws/messages {
+            set $NGINX_USERS_UPSTREAM "users";
+            proxy_pass http://$NGINX_USERS_UPSTREAM:8000;
+            
+            # WebSocket headers
+            proxy_http_version 1.1;
+            proxy_set_header Upgrade $http_upgrade;
+            proxy_set_header Connection "upgrade";
+            proxy_set_header Sec-WebSocket-Protocol $http_sec_websocket_protocol;
+
+            # Pass through auth headers
+            proxy_set_header Authorization $http_authorization;
+            proxy_set_header Host $host;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $scheme;
+
+            # Timeouts
+            proxy_read_timeout 86400s;
+            proxy_send_timeout 86400s;
+            proxy_connect_timeout 5s;
+
+            # Buffering
+            proxy_buffering off;
+            proxy_request_buffering off;
+
+        }
 
         location / {
             set $NGINX_USERS_UPSTREAM "users";
@@ -278,13 +307,12 @@ http {
             proxy_read_timeout 60s;
             proxy_send_timeout 60s;
 
-            # CORS headers for all responses
+            # CORS headers
             add_header 'Access-Control-Allow-Origin' 'https://worldchat.app.codecollective.us' always;
             add_header 'Access-Control-Allow-Methods' 'GET, POST, PUT, DELETE, OPTIONS' always;
             add_header 'Access-Control-Allow-Headers' 'Authorization, Content-Type, Accept' always;
             add_header 'Access-Control-Allow-Credentials' 'true' always;
 
-            # Respond to OPTIONS preflight
             if ($request_method = OPTIONS ) {
                 add_header 'Access-Control-Max-Age' 1728000;
                 add_header 'Access-Control-Allow-Origin' 'https://worldchat.app.codecollective.us';

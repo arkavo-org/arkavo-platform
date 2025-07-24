@@ -61,10 +61,15 @@
         </div>
         
         <div class="profile-form">
-          <div class="form-group">
-            <label>Username</label>
-            <input id="username" type="text" readonly>
-          </div>
+        <div class="form-group">
+            <label for="name">Full Name</label>
+            <input type="text" class="form-control" id="name" placeholder="Enter your full name">
+        </div>
+        <div class="form-group">
+            <label for="display-name">Display Name</label>
+            <input type="text" class="form-control" id="display-name" placeholder="Enter your public display name">
+            <small class="form-text text-muted">This name will be visible to other users</small>
+        </div>
           
           <div class="form-group">
             <label>Bio</label>
@@ -112,95 +117,7 @@
 </body>
 
 <script src="./auth.js"></script>
-<script>
-  document.addEventListener('DOMContentLoaded', async () => {
-    // Wait for Keycloak to be fully initialized
-    if (!keycloak.authenticated || !keycloak.tokenParsed) {
-      console.log('Waiting for Keycloak initialization...');
-      await new Promise(resolve => {
-        const checkAuth = setInterval(() => {
-          if (keycloak.authenticated && keycloak.tokenParsed) {
-            clearInterval(checkAuth);
-            resolve();
-          }
-        }, 100);
-      });
-    }
-
-    try {
-        // Fetch user profile data from our API
-        const apiBase = window.location.hostname === 'localhost' ? '/users' : 'https://users.app.codecollective.us';
-        const response = await fetch(`${apiBase}/users/${keycloak.tokenParsed.preferred_username}`, {
-          headers: {
-            'Authorization': `Bearer ${keycloak.token}`
-          }
-        });
-        
-        if (!response.ok) throw new Error('Failed to fetch profile');
-        
-        const profile = await response.json();
-        
-        // Update profile UI
-        const profilePic = document.getElementById('profile-pic');
-        profilePic.src = profile.picture || 'https://codecollective.us/images/default-profile.png';
-        profilePic.onerror = () => {
-          profilePic.src = 'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCI+PHBhdGggZD0iTTEyLDJBMTAsMTAgMCAwLDAgMiwxMkExMCwxMCAwIDAsMCAxMiwyMkExMCwxMCAwIDAsMCAyMiwxMkExMCwxMCAwIDAsMCAxMiwyTTEyLDRBNyw3IDAgMCwxIDE5LDExQTcsNyAwIDAsMSAxMiwxOEE3LDcgMCAwLDEgNSwxMUE3LDcgMCAwLDEgMTIsNE0xMiw2QTUsNSAwIDAsMCA3LDExQTUsNSAwIDAsMCAxMiwxNkE1LDUgMCAwLDAgMTcsMTFBNSw1IDAgMCwwIDEyLDZNNiwxMkE2LDYgMCAwLDAgMTIsNjhBNiw2IDAgMCwwIDE4LDEyQTUsNSAwIDAsMSAxMiwxN0E1LDUgMCAwLDEgNiwxMloiLz48L3N2Zz4=';
-        };
-        document.getElementById('profile-name').textContent = profile.name || 'Anonymous';
-        document.getElementById('profile-email').textContent = profile.email || '';
-        document.getElementById('username').value = profile.username || '';
-        document.getElementById('bio').value = profile.bio || 'No bio provided';
-        document.getElementById('street').value = profile.street || '';
-        document.getElementById('city').value = profile.city || '';
-        document.getElementById('state').value = profile.state || '';
-        document.getElementById('zip').value = profile.zip_code || '';
-        document.getElementById('country').value = profile.country || '';
-      
-    } catch (error) {
-      console.error('Error loading profile:', error);
-      document.getElementById('profile-name').textContent = 'Error loading profile';
-    }
-
-    // Handle save
-    document.getElementById('save-btn').addEventListener('click', async () => {
-      try {
-        const profileData = {
-          username: document.getElementById('username').value,
-          email: document.getElementById('profile-email').textContent,
-          name: document.getElementById('profile-name').textContent,
-          bio: document.getElementById('bio').value,
-          street: document.getElementById('street').value,
-          city: document.getElementById('city').value,
-          state: document.getElementById('state').value,
-          zip_code: document.getElementById('zip').value,
-          country: document.getElementById('country').value
-        };
-
-        const response = await fetch(
-          `${apiBase}/users/${keycloak.tokenParsed.preferred_username}`,
-          {
-            method: 'PUT',
-            headers: {
-              'Authorization': `Bearer ${keycloak.token}`,
-              'Content-Type': 'application/json'
-            },
-            body: JSON.stringify(profileData)
-          }
-        );
-
-        if (!response.ok) throw new Error('Failed to save profile');
-        alert('Profile saved successfully!');
-      } catch (error) {
-        console.error('Error saving profile:', error);
-        alert('Error saving profile');
-      }
-    });
-
-    // Handle logout
-    document.getElementById('logout-btn').addEventListener('click', () => {
-      keycloak.logout();
-    });
-  });
+<script src ="./profile.js"></script>
 </script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/fullcalendar/6.1.8/index.global.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>

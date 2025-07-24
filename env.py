@@ -716,7 +716,7 @@ libretranslate = dict(
     detach=True,
     ports={"5000/tcp": 5000},
     volumes={
-        os.path.join(current_dir, "/libretranslate"): {
+        os.path.join(current_dir, "libretranslate"): {
             "bind": "/home/libretranslate/.local/share/argos-translate/packages",
             "mode": "rw",
         }
