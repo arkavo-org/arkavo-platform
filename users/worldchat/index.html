@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no" />
+  <title>Code Collective | Chat</title>
+
+  <!-- SEO Meta Tags -->
+  <meta name="description" content="Code Collective chat application" />
+  <meta name="robots" content="index, follow" />
+  <meta name="googlebot" content="index, follow" />
+  <link rel="canonical" href="https://codecollective.us/" />
+
+  <!-- Open Graph / Facebook -->
+  <meta property="og:type" content="website" />
+  <meta property="og:url" content="https://codecollective.us/" />
+  <meta property="og:site_name" content="Code Collective" />
+  <meta property="og:title" content="Code Collective Chat" />
+  <meta property="og:description" content="Code Collective chat application" />
+
+  <!-- Favicon -->
+  <link rel="icon" href="https://codecollective.us/images/favicons/favicon.png" />
+
+  <link rel="preload" href="https://codecollective.us/css/master.css" as="style">
+  <link rel="preconnect" href="https://cdnjs.cloudflare.com">
+  <link rel="preconnect" href="https://cdn.jsdelivr.net">
+
+  <!-- Stylesheets -->
+  <link rel="stylesheet" href="https://codecollective.us/css/master.css" />
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <link rel="stylesheet" href="./style.css" />
+
+  <!-- Keycloak Script -->
+  <script src="https://keycloak.app.codecollective.us/auth/js/keycloak.js"></script>
+
+<body id="body">
+  <video id="bg-video" autoplay loop muted playsinline>
+    <source src="https://codecollective.us/videos/baltimorenight_15s_crossfaded.mp4" type="video/mp4">
+    Your browser does not support the video tag.
+  </video>
+
+  <nav class="main-nav" aria-label="Main Navigation">
+    <div class="navbar dark-mode">
+      <a href="/#main">Home</a>
+      <a href="/balticonomy/">Balticonomy</a>
+      <a href="/calendar.html">Calendar</a> 
+      <a id="login-btn" href="#">Login</a>
+    </div>
+  </nav>
+
+  <main id="wrapper" class="longform dark-mode" style="padding: 0; margin: 0;">
+    <section id="main" class="longform dark-mode" style="padding: 0; margin: 0;">
+      <div class="chat-container">
+        <h1 style="margin: 10px 0; font-size: 1vw; text-align: center">World Chat</h1>
+        <div class="messages-container" id="messages">
+          <!-- Messages will appear here -->
+        </div>
+        <div class="message-input">
+          <input type="text" id="message-input" placeholder="Type your message...">
+          <button id="send-button">Send</button>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <our-footer></our-footer>
+  <our-slack-link></our-slack-link>
+
+</body>
+
+<script src="./message.js"></script>
+<script src="./auth.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/fullcalendar/6.1.8/index.global.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+
+</html>

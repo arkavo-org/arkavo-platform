@@ -17,6 +17,7 @@ keycloak_dir = os.path.join(current_dir, "keycloak")
 opentdf_dir = os.path.join(current_dir, "opentdf")
 nginx_dir = os.path.join(current_dir, "nginx")
 webapp_dir = os.path.join(current_dir, "webapp")
+worldchat_dir = os.path.join(current_dir, "users", "worldchat")
 levatel_dir = os.path.join(current_dir, "..", "CodeCollective")
 org_dir = os.path.join(current_dir, "org")
 certs_dir = os.path.join(current_dir, "certs")
@@ -301,6 +302,11 @@ nginx = dict(
             "bind": "/cc",
             "mode": "rw",
         },
+        worldchat_dir: {
+            "bind": "/worldchat",
+            "mode": "rw",
+        },
+        
         os.path.join(certs_dir, "ssl"): {"bind": "/etc/nginx/ssl", "mode": "rw"},
         os.path.join(certs_dir, "html"): {
             "bind": "/usr/share/nginx/html",
