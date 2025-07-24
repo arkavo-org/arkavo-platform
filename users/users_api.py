@@ -2,9 +2,8 @@ from fastapi import FastAPI, Depends, HTTPException, status, Request
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from pydantic import BaseModel
 from typing import Optional
-import jwt
+from jose import jwt, JWTError, jwk
 import requests
-from jwt.exceptions import InvalidTokenError
 from sqlalchemy import create_engine, Column, String, Text
 from sqlalchemy.orm import declarative_base, sessionmaker, Session
 import env
@@ -56,26 +55,38 @@ KEYCLOAK_REALM = env.KEYCLOAK_REALM
 ALGORITHM = "RS256"
 security = HTTPBearer()
 
+# JWKS retrieval
 async def get_jwks():
     jwks_url = f"{KEYCLOAK_URL}/realms/{KEYCLOAK_REALM}/protocol/openid-connect/certs"
     response = requests.get(jwks_url)
+    response.raise_for_status()
     return response.json()
 
-# JWT Authentication with Keycloak
+# JWT Authentication with python-jose
 async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(security)):
+    token = credentials.credentials
     try:
-        token = credentials.credentials
         jwks = await get_jwks()
-        public_key = jwt.algorithms.RSAAlgorithm.from_jwk(jwks["keys"][0])
+        unverified_header = jwt.get_unverified_header(token)
+        kid = unverified_header.get("kid")
+        key = next((k for k in jwks["keys"] if k["kid"] == kid), None)
+        if key is None:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Public key not found in JWKS",
+                headers={"WWW-Authenticate": "Bearer"},
+            )
+
+        public_key = jwk.construct(key)
         payload = jwt.decode(
             token,
-            public_key,
+            key=public_key.to_pem().decode("utf-8"),
             algorithms=[ALGORITHM],
             audience="account",
             issuer=f"{KEYCLOAK_URL}/realms/{KEYCLOAK_REALM}"
         )
         return payload
-    except InvalidTokenError as e:
+    except JWTError:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid authentication credentials",
@@ -136,7 +147,7 @@ def update_user(
 
 @app.get("/profile")
 async def get_profile(current_user: dict = Depends(get_current_user)):
-    return {"message": "Profile endpoint"}
+    return {"message": "Profile endpoint", "user": current_user}
 
 if __name__ == "__main__":
     import uvicorn

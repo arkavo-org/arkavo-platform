@@ -114,10 +114,23 @@
 <script src="./auth.js"></script>
 <script>
   document.addEventListener('DOMContentLoaded', async () => {
+    // Wait for Keycloak to be fully initialized
+    if (!keycloak.authenticated || !keycloak.tokenParsed) {
+      console.log('Waiting for Keycloak initialization...');
+      await new Promise(resolve => {
+        const checkAuth = setInterval(() => {
+          if (keycloak.authenticated && keycloak.tokenParsed) {
+            clearInterval(checkAuth);
+            resolve();
+          }
+        }, 100);
+      });
+    }
 
     try {
-        // Fetch user profile data from our new API
-        const response = await fetch('https://usres.app.codecollective.us/users/' + keycloak.tokenParsed.preferred_username, {
+        // Fetch user profile data from our API
+        const apiBase = window.location.hostname === 'localhost' ? '/users' : 'https://users.app.codecollective.us';
+        const response = await fetch(`${apiBase}/users/${keycloak.tokenParsed.preferred_username}`, {
           headers: {
             'Authorization': `Bearer ${keycloak.token}`
           }
@@ -164,7 +177,7 @@
         };
 
         const response = await fetch(
-          'https://usres.app.codecollective.us/users/' + keycloak.tokenParsed.preferred_username,
+          `${apiBase}/users/${keycloak.tokenParsed.preferred_username}`,
           {
             method: 'PUT',
             headers: {
