@@ -2,12 +2,19 @@ from fastapi import FastAPI, Depends, HTTPException, status, Request, WebSocket,
 import os
 import uuid
 import shutil
+import aiohttp
+import asyncio
 import io
+import concurrent.futures
+import keycloak
 from PIL import Image
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from fastapi.websockets import WebSocketState
 from pydantic import BaseModel
-from typing import Optional, List
+
+# Security scheme for JWT tokens
+security = HTTPBearer()
+from typing import Optional, List, Dict
 from datetime import datetime, timezone
 import datetime as dt
 from jose import jwt, JWTError, jwk
@@ -61,63 +68,10 @@ class User(UserBase):
     class Config:
         from_attributes = True
 
-class Message(BaseModel):
-    text: str
-    sender: str
-    timestamp: datetime
-    metadata: Optional[dict] = None
-
-# In-memory message store
-messages_all_languages: List[Message] = []
-messages_by_language = {}
-
-
-# Keycloak Configuration
-KEYCLOAK_URL = env.KEYCLOAK_URL
-KEYCLOAK_REALM = env.KEYCLOAK_REALM
-ALGORITHM = "RS256"
-security = HTTPBearer()
-
-# JWKS retrieval
-async def get_jwks():
-    jwks_url = f"{KEYCLOAK_URL}/realms/{KEYCLOAK_REALM}/protocol/openid-connect/certs"
-    response = requests.get(jwks_url)
-    response.raise_for_status()
-    return response.json()
-
-# Token verification helper
-async def verify_token(token: str) -> dict:
-    """Verify JWT token and return payload if valid"""
-    try:
-        jwks = await get_jwks()
-        unverified_header = jwt.get_unverified_header(token)
-        kid = unverified_header.get("kid")
-        key = next((k for k in jwks["keys"] if k["kid"] == kid), None)
-        if not key:
-            raise JWTError("Public key not found in JWKS")
-
-        public_key = jwk.construct(key)
-        payload = jwt.decode(
-            token,
-            key=public_key.to_pem().decode("utf-8"),
-            algorithms=[ALGORITHM],
-            audience="account",
-            issuer=f"{KEYCLOAK_URL}/realms/{KEYCLOAK_REALM}"
-        )
-        print(f"Token verified for user: {payload.get('preferred_username')}")
-        return payload
-    except JWTError as e:
-        print(f"Token verification failed: {str(e)}")
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid authentication credentials",
-            headers={"WWW-Authenticate": "Bearer"},
-        ) from e
-
 # JWT Authentication with python-jose
 async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(security)):
     token = credentials.credentials
-    return await verify_token(token)
+    return await keycloak.verify_token(token)
 
 # FastAPI app
 app = FastAPI()
@@ -133,16 +87,6 @@ async def startup_event():
             db.execute(text("ALTER TABLE users ADD COLUMN display_name VARCHAR"))
             db.commit()
             print("Added display_name column to users table")
-
-    try:
-        response = requests.get("http://libretranslate:5000/languages")
-        response.raise_for_status()
-        languages = [lang["code"] for lang in response.json()]
-        print("Available LibreTranslate languages:", languages)
-        for lang in languages:
-            messages_by_language[lang] = []
-    except Exception as e:
-        print(f"Failed to fetch LibreTranslate languages: {e}")
 
 # Dependency
 def get_db():
@@ -267,7 +211,7 @@ async def upload_profile_picture(
     
     return {"pictureUrl": "/" + returl}
 
-@app.put("/users/{username}", response_model=User)
+@app.put("/profile")
 def update_user(
     username: str, 
     user: UserCreate, 
@@ -283,208 +227,11 @@ def update_user(
     
     db.commit()
     db.refresh(db_user)
-    return db_user
+    return {"message": "Profile updated"}
 
 @app.get("/profile")
 async def get_profile(current_user: dict = Depends(get_current_user)):
     return {"message": "Profile endpoint", "user": current_user}
-
-@app.post("/messages")
-async def create_message(
-    message: Message,
-    current_user: dict = Depends(get_current_user)
-):
-    message.sender = current_user.get("preferred_username", "anonymous")
-    message.timestamp = datetime.now(timezone.utc)
-    messages_all_languages.append(message)
-
-    # Detect source language first
-    try:
-        detect_response = requests.post(
-            "http://libretranslate:5000/detect",
-            json={"q": message.text}
-        )
-        detect_response.raise_for_status()
-        source_lang = detect_response.json()[0]["language"]
-    except Exception as e:
-        print(f"Failed to detect language: {e}")
-        source_lang = "en"  # Fallback to English
-
-    # Translate message to all languages
-    for lang_code in messages_by_language.keys():
-        try:
-            if lang_code != source_lang:  # Skip if same as source language
-                response = requests.post(
-                    "http://libretranslate:5000/translate",
-                    json={
-                        "q": message.text,
-                        "source": source_lang,
-                        "target": lang_code
-                    }
-                )
-                response.raise_for_status()
-                translated_text = response.json()["translatedText"]
-                
-                translated_msg = Message(
-                    text=translated_text,
-                    sender=message.sender,
-                    timestamp=message.timestamp,
-                    metadata={"original_text": message.text, "source_language": source_lang}
-                )
-                messages_by_language[lang_code].append(translated_msg)
-            else:
-                # For source language, store original message
-                messages_by_language[lang_code].append(message)
-        except Exception as e:
-            print(f"Failed to translate message from {source_lang} to {lang_code}: {e}")
-    
-    return {"status": "Message received and translated"}
-from datetime import datetime, timezone
-
-@app.get("/messages")
-async def get_messages(since: Optional[str] = None):
-    if since:
-        try:
-            # Handle Zulu (UTC) "Z" suffix by converting to +00:00
-            if since.endswith("Z"):
-                since = since.replace("Z", "+00:00")
-            since_dt = datetime.fromisoformat(since)
-            filtered = [msg for msg in messages_all_languages if msg.timestamp >= since_dt]
-            return {"messages": filtered}
-        except ValueError:
-            raise HTTPException(
-                status_code=400,
-                detail="Invalid datetime format. Use ISO format (YYYY-MM-DDTHH:MM:SS[.ffffff][Z or [±]HH:MM])"
-            )
-    return {"messages": messages_all_languages}
-
-@app.get("/languages")
-async def get_languages(current_user: dict = Depends(get_current_user)):
-    """Get list of available languages"""
-    return {"languages": list(messages_by_language.keys())}
-
-@app.get("/messages/{language_code}")
-async def get_messages_by_language(
-    language_code: str,
-    since: Optional[str] = None,
-    current_user: dict = Depends(get_current_user)
-):
-    """Get messages in a specific language"""
-    if language_code not in messages_by_language:
-        raise HTTPException(status_code=404, detail="Language not supported")
-    
-    messages = messages_by_language[language_code]
-    if since:
-        try:
-            # Handle Zulu (UTC) "Z" suffix by converting to +00:00
-            if since.endswith("Z"):
-                since = since.replace("Z", "+00:00")
-            since_dt = datetime.fromisoformat(since)
-            filtered = [msg for msg in messages if msg.timestamp >= since_dt]
-            return {"messages": filtered}
-        except ValueError:
-            raise HTTPException(
-                status_code=400,
-                detail="Invalid datetime format. Use ISO format (YYYY-MM-DDTHH:MM:SS[.ffffff][Z or [±]HH:MM])"
-            )
-    return {"messages": messages}
-
-class ConnectionManager:
-    def __init__(self):
-        self.active_connections: dict[str, WebSocket] = {}
-
-    async def connect(self, websocket: WebSocket, client_id: str):
-        await websocket.accept()
-        self.active_connections[client_id] = websocket
-
-    def disconnect(self, client_id: str):
-        if client_id in self.active_connections:
-            del self.active_connections[client_id]
-
-    async def send_initial_messages(self, websocket: WebSocket, language: str = "en"):
-        if language not in messages_by_language:
-            language = "en"
-        messages = messages_by_language[language][-20:]  # Get last 20 messages
-        await websocket.send_json({
-            "type": "initial_messages",
-            "messages": [msg.dict() for msg in messages]
-        })
-
-    async def broadcast(self, message: dict):
-        for connection in self.active_connections.values():
-            if connection.client_state == WebSocketState.CONNECTED:
-                try:
-                    await connection.send_json(message)
-                except Exception as e:
-                    print(f"Error broadcasting message: {e}")
-
-manager = ConnectionManager()
-
-@app.websocket("/ws/messages")
-async def websocket_endpoint(websocket: WebSocket):
-    # Verify WebSocket upgrade header
-    if "upgrade" not in websocket.headers.get("connection", "").lower():
-        await websocket.close(code=status.WS_1002_PROTOCOL_ERROR)
-        return
-        
-    # Accept connection first
-    await websocket.accept()
-    client_id = None
-    authenticated = False
-    
-    try:
-        # Wait for auth message
-        data = await websocket.receive_json()
-        if data.get("type") != "auth":
-            await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
-            return
-            
-        # Validate token
-        token = data.get("token")
-        if not token:
-            await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
-            return
-            
-        payload = await verify_token(token)
-        client_id = payload.get("sub") or str(uuid.uuid4())
-        authenticated = True
-        
-        # Send auth confirmation
-        await websocket.send_json({"type": "auth-success"})
-        
-        # Send initial messages
-        language = websocket.headers.get("accept-language", "en")
-        await manager.send_initial_messages(websocket, language)
-        
-        while True:
-            data = await websocket.receive_json()
-            
-            if data.get("type") == "message":
-                # Create and store the message
-                message = Message(
-                    text=data["text"],
-                    sender=payload.get("preferred_username", "anonymous"),
-                    timestamp=datetime.now(timezone.utc)
-                )
-                
-                # Add to all languages store
-                messages_all_languages.append(message)
-                
-                # Broadcast to all clients
-                await manager.broadcast({
-                    "type": "message",
-                    "text": message.text,
-                    "sender": message.sender,
-                    "timestamp": message.timestamp.isoformat()
-                })
-                
-    except JWTError:
-        await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
-    except WebSocketDisconnect:
-        manager.disconnect(client_id)
-    except Exception as e:
-        print(f"WebSocket error: {e}")
-        manager.disconnect(client_id)
 
 if __name__ == "__main__":
     import uvicorn

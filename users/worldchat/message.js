@@ -92,11 +92,17 @@ function initMessageApp() {
     figure.classList.add('message-figure');
     
     const avatar = document.createElement('img');
-    avatar.src = profile.picture || 'https://codecollective.us/images/default-profile.png';
+    // First try profile picture from user record
+    avatar.src = profile.picture || 
+                 // Then try Keycloak avatar
+                 keycloak.tokenParsed?.picture || 
+                 // Finally fall back to default
+                 'https://codecollective.us/images/default-profile.png';
     avatar.classList.add('message-avatar');
     avatar.alt = `${profile.display_name || sender}'s profile picture`;
     avatar.onerror = () => {
-      avatar.src = 'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCI+PHBhdGggZD0iTTEyLDJBMTAsMTAgMCAwLDAgMiwxMkExMCwxMCAwIDAsMCAxMiwyMkExMCwxMCAwIDAsMCAyMiwxMkExMCwxMCAwIDAsMCAxMiwyTTEyLDRBNyw3IDAgMCwxIDE5LDExQTcsNyAwIDAsMSAxMiwxOEE3LDcgMCAwLDEgNSwxMUE3LDcgMCAwLDEgMTIsNE0xMiw2QTUsNSAwIDAsMCA3LDExQTUsNSAwIDAsMCAxMiwxNkE1LDUgMCAwLDAgMTcsMTFBNSw1IDAgMCwwIDEyLDZNNiwxMkE2LDYgMCAwLDAgMTIsNjhBNiw2IDAgMCwwIDE4LDEyQTUsNSAwIDAsMSAxMiwxN0E1LDUgMCAwLDEgNiwxMloiLz48L3N2Zz4=';
+      // If image fails to load, use fallback
+      avatar.src = 'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCI+PHBhdGggZD0iTTEyLDJBMTAsMTAgMCAwLDAgMiwxMkExMCwxMCAwIDAsMCAxMiwyMkExMCwxMCAwIDAsMCAyMiwxMkExMCwxMCAwIDAsMCAxMiwyTTEyLDRBNyw3IDAgMCwxIDE5LDExQTcsNyAwIDAsMSAxMiwxOEE3LDcgMCAwLDEgNSwxMVE3LDcgMCAwLDEgMTIsNE0xMiw2QTUsNSAwIDAsMCA3LDExQTUsNSAwIDAsMCAxMiwxNkE1LDUgMCAwLDAgMTcsMTFBNSw1IDAgMCwwIDEyLDZNNiwxMkE2LDYgMCAwLDAgMTIsNjhBNiw2IDAgMCwwIDE4LDEyQTUsNSAwIDAsMSAxMiwxN0E1LDUgMCAwLDEgNiwxMloiLz48L3N2Zz4=';
     };
     
     const figcaption = document.createElement('figcaption');

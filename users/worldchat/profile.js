@@ -164,7 +164,7 @@ document.addEventListener('DOMContentLoaded', async () => {
       };
 
       try {
-        const res = await fetch(`${apiBase}/users/${encodeURIComponent(username)}`, {
+        const res = await fetch(`${apiBase}/profile`, {
           method: 'PUT',
           headers: {
             'Authorization': `Bearer ${keycloak.token}`,
