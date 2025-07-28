@@ -144,7 +144,8 @@ if "libretranslate" in env.SERVICES_TO_RUN:
 
 if "users" in env.SERVICES_TO_RUN:
     utils_docker.run_container(env.usersdb)
-    #utils_docker.run_container(env.users_api)
+    utils_docker.run_container(env.redis)
+    utils_docker.run_container(env.users_api)
 
 
 sys.stdout.flush()  # Force flush in CI environments

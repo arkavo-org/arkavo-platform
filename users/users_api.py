@@ -11,6 +11,11 @@ from PIL import Image
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from fastapi.websockets import WebSocketState
 from pydantic import BaseModel
+from typing import Optional, List, Dict
+from datetime import datetime, timezone
+import datetime as dt
+from jose import jwt, JWTError, jwk
+import requests
 
 # Security scheme for JWT tokens
 security = HTTPBearer()
@@ -73,6 +78,80 @@ async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(s
     token = credentials.credentials
     return await keycloak.verify_token(token)
 
+# Message models and storage
+class Message(BaseModel):
+    text: str
+    sender: str
+    timestamp: datetime
+    metadata: Optional[dict] = None
+
+messages_all_languages: List[Message] = []
+messages_by_language = {}
+
+class ConnectionManager:
+    def __init__(self):
+        self.active_connections: dict[str, WebSocket] = {}
+
+    async def connect(self, websocket: WebSocket, client_id: str):
+        await websocket.accept()
+        self.active_connections[client_id] = websocket
+
+    def disconnect(self, client_id: str):
+        if client_id in self.active_connections:
+            del self.active_connections[client_id]
+
+    async def send_initial_messages(self, websocket: WebSocket, language: str = "en"):
+        if language not in messages_by_language:
+            language = "en"
+        messages = messages_by_language[language][-20:]  # Get last 20 messages
+        await websocket.send_json({
+            "type": "initial_messages",
+            "messages": [msg.dict() for msg in messages]
+        })
+
+    async def broadcast(self, message: dict):
+        for connection in self.active_connections.values():
+            if connection.client_state == WebSocketState.CONNECTED:
+                try:
+                    await connection.send_json(message)
+                except Exception as e:
+                    print(f"Error broadcasting message: {e}")
+
+manager = ConnectionManager()
+
+async def translate_message_async(
+    session: aiohttp.ClientSession,
+    lang_code: str,
+    source_lang: str,
+    message: Message
+) -> tuple[str, Message]:
+    try:
+        if lang_code != source_lang:
+            async with session.post(
+                "http://libretranslate:5000/translate",
+                json={
+                    "q": message.text,
+                    "source": source_lang,
+                    "target": lang_code
+                }
+            ) as response:
+                response.raise_for_status()
+                data = await response.json()
+                translated_text = data["translatedText"]
+
+                translated_msg = Message(
+                    text=translated_text,
+                    sender=message.sender,
+                    timestamp=message.timestamp,
+                    metadata={"original_text": message.text, "source_language": source_lang}
+                )
+                return lang_code, translated_msg
+        else:
+            return lang_code, message
+    except Exception as e:
+        print(f"Failed to translate message from {source_lang} to {lang_code}: {e}")
+        return lang_code, None
+
 # FastAPI app
 app = FastAPI()
 
@@ -87,6 +166,17 @@ async def startup_event():
             db.execute(text("ALTER TABLE users ADD COLUMN display_name VARCHAR"))
             db.commit()
             print("Added display_name column to users table")
+
+    # Initialize message languages
+    try:
+        response = requests.get("http://libretranslate:5000/languages")
+        response.raise_for_status()
+        languages = [lang["code"] for lang in response.json()]
+        print("Available LibreTranslate languages:", languages)
+        for lang in languages:
+            messages_by_language[lang] = []
+    except Exception as e:
+        print(f"Failed to fetch LibreTranslate languages: {e}")
 
 # Dependency
 def get_db():
@@ -139,7 +229,7 @@ async def upload_profile_picture(
     username = current_user.get("preferred_username")
     if not username:
         raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
+            status_code=status.HTTP_403_FORBIDDEN, 
             detail="No username found in auth token"
         )
 
@@ -232,6 +322,138 @@ def update_user(
 @app.get("/profile")
 async def get_profile(current_user: dict = Depends(get_current_user)):
     return {"message": "Profile endpoint", "user": current_user}
+
+# Message endpoints
+@app.post("/messages")
+async def create_message(
+    message: Message,
+    current_user: dict = Depends(get_current_user)
+):
+    # Set metadata
+    message.sender = current_user.get("preferred_username", "anonymous")
+    message.timestamp = datetime.now(timezone.utc)
+    messages_all_languages.append(message)
+
+    # Detect source language
+    try:
+        async with aiohttp.ClientSession() as session:
+            async with session.post(
+                "http://libretranslate:5000/detect",
+                json={"q": message.text}
+            ) as detect_response:
+                detect_response.raise_for_status()
+                detect_data = await detect_response.json()
+                source_lang = detect_data[0]["language"]
+
+            # Translate to all languages concurrently
+            tasks = [
+                translate_message_async(session, lang_code, source_lang, message)
+                for lang_code in messages_by_language.keys()
+            ]
+            results = await asyncio.gather(*tasks)
+
+            # Save translations
+            for lang_code, translated_msg in results:
+                if translated_msg is not None:
+                    messages_by_language[lang_code].append(translated_msg)
+
+    except Exception as e:
+        print(f"Translation flow failed: {e}")
+
+    return {"status": "Message received and translated"}
+
+@app.get("/messages")
+async def get_messages(since: Optional[str] = None):
+    if since:
+        try:
+            if since.endswith("Z"):
+                since = since.replace("Z", "+00:00")
+            since_dt = datetime.fromisoformat(since)
+            filtered = [msg for msg in messages_all_languages if msg.timestamp >= since_dt]
+            return {"messages": filtered}
+        except ValueError:
+            raise HTTPException(
+                status_code=400,
+                detail="Invalid datetime format. Use ISO format (YYYY-MM-DDTHH:MM:SS[.ffffff][Z or [±]HH:MM])"
+            )
+    return {"messages": messages_all_languages}
+
+@app.get("/languages")
+async def get_languages(current_user: dict = Depends(get_current_user)):
+    """Get list of available languages"""
+    return {"languages": list(messages_by_language.keys())}
+
+@app.get("/messages/{language_code}")
+async def get_messages_by_language(
+    language_code: str,
+    since: Optional[str] = None,
+    current_user: dict = Depends(get_current_user)
+):
+    """Get messages in a specific language"""
+    if language_code not in messages_by_language:
+        raise HTTPException(status_code=404, detail="Language not supported")
+    
+    messages = messages_by_language[language_code]
+    if since:
+        try:
+            if since.endswith("Z"):
+                since = since.replace("Z", "+00:00")
+            since_dt = datetime.fromisoformat(since)
+            filtered = [msg for msg in messages if msg.timestamp >= since_dt]
+            return {"messages": filtered}
+        except ValueError:
+            raise HTTPException(
+                status_code=400,
+                detail="Invalid datetime format. Use ISO format (YYYY-MM-DDTHH:MM:SS[.ffffff][Z or [±]HH:MM])"
+            )
+    return {"messages": messages}
+
+@app.websocket("/ws/messages")
+async def websocket_endpoint(websocket: WebSocket):
+    if "upgrade" not in websocket.headers.get("connection", "").lower():
+        await websocket.close(code=status.WS_1002_PROTOCOL_ERROR)
+        return
+        
+    await websocket.accept()
+    client_id = None
+    
+    try:
+        data = await websocket.receive_json()
+        if data.get("type") != "auth":
+            await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
+            return
+            
+        token = data.get("token")
+        if not token:
+            await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
+            return
+            
+        payload = await keycloak.verify_token(token)
+        client_id = payload.get("sub") or str(uuid.uuid4())
+        
+        await websocket.send_json({"type": "auth-success"})
+        
+        language = websocket.headers.get("accept-language", "en")
+        await manager.send_initial_messages(websocket, language)
+        
+        while True:
+            data = await websocket.receive_json()
+            
+            if data.get("type") == "message":
+                message = Message(
+                    text=data["text"],
+                    sender=payload.get("preferred_username", "anonymous"),
+                    timestamp=datetime.now(timezone.utc)
+                )
+                messages_all_languages.append(message)
+                
+    except JWTError:
+        await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
+    except WebSocketDisconnect:
+        manager.disconnect(client_id)
+    except Exception as e:
+        print(f"WebSocket error: {e}")
+        manager.disconnect(client_id)
 
 if __name__ == "__main__":
     import uvicorn

@@ -1,0 +1,1 @@
+docker run -it --name users --rm --network codecollective -v $(pwd):/app users-api bash

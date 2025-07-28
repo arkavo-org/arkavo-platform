@@ -183,7 +183,9 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   const setupLogoutButton = () => {
     document.getElementById('logout-btn').addEventListener('click', () => {
-      keycloak.logout();
+      keycloak.logout().then(() => {
+        window.location.href = './index.html';
+      });
     });
   };
 

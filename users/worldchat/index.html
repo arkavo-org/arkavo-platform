@@ -29,6 +29,7 @@
   <!-- Stylesheets -->
   <link rel="stylesheet" href="https://codecollective.us/css/master.css" />
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/flag-icons/7.2.0/css/flag-icons.min.css">
   <link rel="stylesheet" href="./style.css" />
 
   <!-- Keycloak Script -->
@@ -42,19 +43,32 @@
 
   <nav class="main-nav" aria-label="Main Navigation">
     <div class="navbar dark-mode">
-      <a href="/#main">Home</a>
-      <a href="/balticonomy/">Balticonomy</a>
-      <a href="/calendar.html">Calendar</a> 
+      <a href="https://codecollective.us/#main">Home</a>
+      <a href="https://codecollective.us/balticonomy/">Balticonomy</a>
+      <a href="https://codecollective.us/calendar.html">Calendar</a> 
       <a id="login-btn" href="#">Login</a>
     </div>
   </nav>
 
   <main id="wrapper" class="longform dark-mode" style="padding: 0; margin: 0;">
     <section id="main" class="longform dark-mode" style="padding: 0; margin: 0;">
-      <div class="chat-container">
+      <div id="login-container" class="login-prompt" style="display: none;">
+        <h2>Welcome to World Chat</h2>
+        <p>Please login to join the conversation</p>
+        <button id="login-prompt-btn" class="login-btn">Login</button>
+      </div>
+      <div id="chat-container" class="chat-container" style="display: none;">
         <div class="chat-header">
           <h1 style="margin: 10px 0; font-size: 1vw; text-align: center">World Chat</h1>
-          <select id="language-select" style="margin: 0 auto; display: block;"></select>
+          <div class="language-selector">
+            <button class="language-dropdown-btn" id="language-dropdown-btn">
+              <span class="fi fi-us"></span> English
+            </button>
+            <div class="language-dropdown-content" id="language-dropdown">
+              <!-- Languages will be populated here -->
+              <div class="language-grid"></div>
+            </div>
+          </div>
         </div>
         <div class="messages-container" id="messages">
           <!-- Messages will appear here -->

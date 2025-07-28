@@ -756,7 +756,33 @@ mongo_studio = dict(
 users_api = dict(
     image="users-api",
     name="users",
+    volumes={
+        os.path.join(current_dir, "users"): {"bind": "/app", "mode": "rw"},  # Named volume with bind info
+    },
     network="codecollective",
     restart_policy={"Name": "always"},
     detach=True,
+    command=["python", "/app/users_api.py"],
 )
+
+redis = dict(
+    image="redis:7.2-alpine",
+    name="redis_messaging",
+    network=NETWORK_NAME,
+    restart_policy={"Name": "always"},
+    detach=True,
+    ports={"6379/tcp": 6379},  # Corrected port mapping format
+    volumes={
+        "redis_data": {"bind": "/data", "mode": "rw"},  # Named volume with bind info
+        os.path.join(current_dir, "redis", "redis.conf"): {"bind": "/usr/local/etc/redis/redis.conf", "mode": "ro"},  # Host file mount
+    },
+    environment={
+        "REDIS_PASSWORD": REDIS_PASSWORD,
+        "REDIS_TLS_ENABLED": "false",
+        "REDIS_MEMORY_LIMIT": "1gb",
+    },
+    command=["redis-server", "/usr/local/etc/redis/redis.conf"],
+)
+# to get rid of memory warning:
+# on the host, run:
+# echo 'vm.overcommit_memory = 1' | sudo tee -a /etc/sysctl.conf

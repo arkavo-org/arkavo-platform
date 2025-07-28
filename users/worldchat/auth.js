@@ -23,22 +23,33 @@ function initAuth() {
 // Update UI based on auth state
 function updateUI(authenticated) {
   const loginBtn = document.getElementById('login-btn');
+  const loginContainer = document.getElementById('login-container');
+  const chatContainer = document.getElementById('chat-container');
 
   if (authenticated) {
-    // User is logged in - show profile picture
+    // User is logged in - show profile picture and chat
     loginBtn.innerHTML = `
       <img src="${keycloak.tokenParsed?.picture || 'default-profile.png'}" 
            class="profile-pic" 
            alt="Profile">
     `;
     loginBtn.href = './profile.html';
+    loginContainer.style.display = 'none';
+    chatContainer.style.display = 'block';
   } else {
-    // User not logged in - show login button
+    // User not logged in - show login button and prompt
     loginBtn.innerHTML = 'Login';
     loginBtn.href = '#';
     loginBtn.onclick = () => keycloak.login();
+    loginContainer.style.display = 'block';
+    chatContainer.style.display = 'none';
   }
 }
+
+// Setup login prompt button
+document.getElementById('login-prompt-btn')?.addEventListener('click', () => {
+  keycloak.login();
+});
 
 // Initialize when DOM is loaded
 document.addEventListener('DOMContentLoaded', initAuth);
