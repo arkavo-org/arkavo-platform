@@ -11,7 +11,7 @@ function initMessageApp() {
   // Fetch user profile
   async function fetchUserProfile(username) {
     if (userProfiles[username]) return userProfiles[username];
-    
+
     try {
       const token = keycloak.token;
       const response = await fetch(`https://users.app.codecollective.us/users/${encodeURIComponent(username)}`, {
@@ -19,7 +19,7 @@ function initMessageApp() {
           'Authorization': `Bearer ${token}`
         }
       });
-      
+
       if (response.ok) {
         const profile = await response.json();
         userProfiles[username] = profile;
@@ -31,9 +31,9 @@ function initMessageApp() {
     // First try Keycloak's avatar, then default
     return {
       display_name: username,
-      picture: keycloak.tokenParsed?.avatar || 
-               keycloak.tokenParsed?.picture || 
-               'https://codecollective.us/images/default-profile.png'
+      picture: keycloak.tokenParsed?.avatar ||
+        keycloak.tokenParsed?.picture ||
+        'https://codecollective.us/images/default-profile.png'
     };
   }
 
@@ -105,12 +105,12 @@ function initMessageApp() {
           'Authorization': `Bearer ${token}`
         }
       });
-      
+
       if (response.ok) {
         const data = await response.json();
         const languageGrid = document.querySelector('.language-grid');
         languageGrid.innerHTML = '';
-        
+
         data.languages.forEach(lang => {
           const flagClass = languageFlags[lang] || lang; // Use exception or default to language code
           const option = document.createElement('div');
@@ -135,13 +135,13 @@ function initMessageApp() {
             messagesContainer.innerHTML = ''; // Clear existing messages
             fetchMessages();
           });
-          
+
           if (lang === currentLanguage) {
             document.getElementById('language-dropdown-btn').innerHTML = `
               <span class="fi fi-${flagClass}"></span> ${lang.toUpperCase()}
             `;
           }
-          
+
           languageGrid.appendChild(option);
         });
       }
@@ -153,53 +153,62 @@ function initMessageApp() {
   // Language change is now handled in the fetchLanguages() function
   // when clicking language options in the dropdown
 
+  // Track seen message IDs for deduplication
+  const seenMessageIds = new Set();
+
   // Function to add a new message to the chat
-  async function addMessage(text, sender, timestamp, isSent = true) {
+  async function addMessage(text, sender, timestamp, isSent = true, id = null) {
+    // Skip if we've already seen this message ID
+    if (id && seenMessageIds.has(id)) return;
+    if (id) seenMessageIds.add(id);
     const profile = await fetchUserProfile(sender);
     const messageArticle = document.createElement('article');
     messageArticle.classList.add('message');
     messageArticle.classList.add(isSent ? 'sent' : 'received');
     messageArticle.setAttribute('aria-label', `Message from ${profile.display_name || sender}`);
-    
+    if (id) {
+      messageArticle.dataset.messageId = id;
+    }
+
     const figure = document.createElement('figure');
     figure.classList.add('message-figure');
-    
+
     const avatar = document.createElement('img');
     // First try profile picture from user record
-    avatar.src = profile.picture || 
-                 // Then try Keycloak avatar
-                 keycloak.tokenParsed?.picture || 
-                 // Finally fall back to default
-                 'https://codecollective.us/images/default-profile.png';
+    avatar.src = profile.picture ||
+      // Then try Keycloak avatar
+      keycloak.tokenParsed?.picture ||
+      // Finally fall back to default
+      'https://codecollective.us/images/default-profile.png';
     avatar.classList.add('message-avatar');
     avatar.alt = `${profile.display_name || sender}'s profile picture`;
     avatar.onerror = () => {
       // If image fails to load, use fallback
       avatar.src = 'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCI+PHBhdGggZD0iTTEyLDJBMTAsMTAgMCAwLDAgMiwxMkExMCwxMCAwIDAsMCAxMiwyMkExMCwxMCAwIDAsMCAyMiwxMkExMCwxMCAwIDAsMCAxMiwyTTEyLDRBNyw3IDAgMCwxIDE5LDExQTcsNyAwIDAsMSAxMiwxOEE3LDcgMCAwLDEgNSwxMVE3LDcgMCAwLDEgMTIsNE0xMiw2QTUsNSAwIDAsMCA3LDExQTUsNSAwIDAsMCAxMiwxNkE1LDUgMCAwLDAgMTcsMTFBNSw1IDAgMCwwIDEyLDZNNiwxMkE2LDYgMCAwLDAgMTIsNjhBNiw2IDAgMCwwIDE4LDEyQTUsNSAwIDAsMSAxMiwxN0E1LDUgMCAwLDEgNiwxMloiLz48L3N2Zz4=';
     };
-    
+
     const figcaption = document.createElement('figcaption');
     figcaption.classList.add('message-author');
     figcaption.textContent = profile.display_name || sender;
-    
+
     figure.appendChild(avatar);
     figure.appendChild(figcaption);
-    
+
     const messageContent = document.createElement('div');
     messageContent.classList.add('message-content');
-    
+
     const timeElem = document.createElement('time');
     timeElem.dateTime = new Date(timestamp).toISOString();
     timeElem.classList.add('message-time');
     timeElem.textContent = new Date(timestamp).toLocaleString();
-    
+
     const textElem = document.createElement('p');
     textElem.classList.add('message-text');
     textElem.textContent = text;
-    
+
     messageContent.appendChild(timeElem);
     messageContent.appendChild(textElem);
-    
+
     messageArticle.appendChild(figure);
     messageArticle.appendChild(messageContent);
     messagesContainer.appendChild(messageArticle);
@@ -215,12 +224,14 @@ function initMessageApp() {
           'Authorization': `Bearer ${token}`
         }
       });
-      
+
       if (response.ok) {
         const data = await response.json();
         if (data.messages.length > 0) {
           data.messages.forEach(msg => {
-            addMessage(msg.text, msg.sender, msg.timestamp, msg.sender === keycloak.tokenParsed?.preferred_username);
+            addMessage(msg.text, msg.sender, msg.timestamp, 
+              msg.sender === keycloak.tokenParsed?.preferred_username,
+              msg.id);
           });
         }
         lastFetchTime = new Date().toISOString();
@@ -249,7 +260,7 @@ function initMessageApp() {
         metadata: {}
       })
     });
-    
+
     await fetchMessages();
     return response;
   }
@@ -261,43 +272,43 @@ function initMessageApp() {
     messageArticle.id = tempId;
     messageArticle.classList.add('message', 'temp-message');
     messageArticle.setAttribute('aria-label', 'Sending message...');
-    
+
     const figure = document.createElement('figure');
     figure.classList.add('message-figure');
-    
+
     const avatar = document.createElement('img');
-    avatar.src = keycloak.tokenParsed?.picture || 
-                 'https://codecollective.us/images/default-profile.png';
+    avatar.src = keycloak.tokenParsed?.picture ||
+      'https://codecollective.us/images/default-profile.png';
     avatar.classList.add('message-avatar');
     avatar.alt = 'Your profile picture';
-    
+
     const figcaption = document.createElement('figcaption');
     figcaption.classList.add('message-author');
     figcaption.textContent = keycloak.tokenParsed?.preferred_username || 'You';
-    
+
     figure.appendChild(avatar);
     figure.appendChild(figcaption);
-    
+
     const messageContent = document.createElement('div');
     messageContent.classList.add('message-content');
-    
+
     const timeElem = document.createElement('time');
     timeElem.dateTime = new Date().toISOString();
     timeElem.classList.add('message-time');
     timeElem.textContent = 'Sending...';
-    
+
     const textElem = document.createElement('p');
     textElem.classList.add('message-text', 'temp-text');
     textElem.textContent = text;
-    
+
     messageContent.appendChild(timeElem);
     messageContent.appendChild(textElem);
-    
+
     messageArticle.appendChild(figure);
     messageArticle.appendChild(messageContent);
     messagesContainer.appendChild(messageArticle);
     messagesContainer.scrollTop = messagesContainer.scrollHeight;
-    
+
     return tempId;
   }
 
@@ -352,71 +363,69 @@ function initMessageApp() {
   // WebSocket connection
   let socket;
   let authenticated = false;
-  
+
+  // Revised WebSocket connection
   function connectWebSocket() {
     if (socket) socket.close();
-    authenticated = false;
-    
-    // Connect without any auth headers
+
     const wsUrl = `wss://users.app.codecollective.us/ws/messages`;
     socket = new WebSocket(wsUrl);
-    
+    let reconnectAttempts = 0;
+    const maxReconnectAttempts = 5;
+    const reconnectDelay = 3000; // 3 seconds
+
     socket.onopen = () => {
+      reconnectAttempts = 0;
       console.log('WebSocket connected, authenticating...');
-      // Send auth as first message
       socket.send(JSON.stringify({
         type: 'auth',
         token: keycloak.token
       }));
     };
-    
-    socket.onmessage = (event) => {
+
+    socket.onmessage = async (event) => {
       const data = JSON.parse(event.data);
-      
-      if (!authenticated) {
-        // Handle auth response
-        if (data.type === 'auth-success') {
-          authenticated = true;
-          console.log('WebSocket authentication successful');
-          // Request initial messages after auth
-          socket.send(JSON.stringify({
-            type: 'get-initial-messages'
-          }));
-        } else if (data.type === 'auth-failure') {
-          console.error('WebSocket authentication failed:', data.message);
-          socket.close();
-        }
-        return;
+
+      if (data.type === 'auth-success') {
+        console.log('WebSocket authenticated');
+        // No need to request initial messages - server sends them automatically
       }
-      
-      // Handle message types
-      if (data.type === 'initial_messages') {
+      else if (data.type === 'initial-messages') {
+        // Clear existing messages and seen IDs
+        messagesContainer.innerHTML = '';
+        seenMessageIds.clear();
         // Add all initial messages
         data.messages.forEach(msg => {
           addMessage(msg.text, msg.sender, msg.timestamp,
-            msg.sender === keycloak.tokenParsed?.preferred_username);
+            msg.sender === keycloak.tokenParsed?.preferred_username,
+            msg.id);
         });
-      } else if (data.type === 'message') {
-        // Add single new message
-        addMessage(data.text, data.sender, data.timestamp,
-          data.sender === keycloak.tokenParsed?.preferred_username);
+      }
+      else if (data.type === 'new-message') {
+        addMessage(data.message.text, data.message.sender, data.message.timestamp,
+          data.message.sender === keycloak.tokenParsed?.preferred_username,
+          data.message.id);
       }
     };
-    
+
     socket.onclose = (event) => {
-      console.log(`WebSocket closed (code: ${event.code}), reconnecting...`);
-      setTimeout(connectWebSocket, 3000);
+      if (reconnectAttempts < maxReconnectAttempts) {
+        const delay = reconnectAttempts * reconnectDelay;
+        console.log(`WebSocket closed, reconnecting in ${delay}ms...`);
+        setTimeout(() => {
+          reconnectAttempts++;
+          connectWebSocket();
+        }, delay);
+      } else {
+        console.error('Max reconnection attempts reached');
+      }
     };
-    
+
     socket.onerror = (error) => {
       console.error('WebSocket error:', error);
-      // Refresh token on auth errors
-      if (error.message.includes('403')) {
-        keycloak.updateToken(30).then(connectWebSocket);
-      }
     };
   }
-  
+
   connectWebSocket();
 }
 

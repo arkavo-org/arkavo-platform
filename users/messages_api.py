@@ -3,6 +3,7 @@ import os
 import uuid
 import aiohttp
 import asyncio
+import keycloak
 import redis
 from fastapi.security import HTTPBearer
 from pydantic import BaseModel
@@ -59,6 +60,7 @@ def get_messages(since: datetime = None, language: str = None):
         msg_data = redis_client.hgetall(MESSAGE_HASH_KEY.format(msg_id.decode()))
         if msg_data:
             message = {
+                'id': msg_id.decode(),
                 'text': msg_data[b'text'].decode(),
                 'sender': msg_data[b'sender'].decode(),
                 'timestamp': datetime.fromisoformat(msg_data[b'timestamp'].decode()),
@@ -111,6 +113,11 @@ async def create_message(message: Message, current_user: dict = Depends(get_curr
             for lang_code, translated_msg in results:
                 if translated_msg:
                     store_message(translated_msg, lang_code)
+                    # Broadcast to WebSocket clients in this language
+                    await manager.send_message_to_language(lang_code, {
+                        'type': 'new_message',
+                        'message': translated_msg.dict()
+                    })
     
     except Exception as e:
         print(f"Error processing message: {e}")
@@ -136,14 +143,17 @@ async def get_languages():
 
 class ConnectionManager:
     def __init__(self):
-        self.active_connections: dict[str, WebSocket] = {}
+        self.active_connections: dict[str, dict] = {}  # {client_id: {'ws': WebSocket, 'lang': str}}
         self.pubsub = redis_client.pubsub()
 
-    async def connect(self, websocket: WebSocket, client_id: str):
+    async def connect(self, websocket: WebSocket, client_id: str, language: str):
         await websocket.accept()
-        self.active_connections[client_id] = websocket
+        self.active_connections[client_id] = {
+            'ws': websocket,
+            'lang': language
+        }
         # Subscribe to messages channel in background
-        asyncio.create_task(self.listen_for_messages(client_id))
+        asyncio.create_task(self.listen_for_messages(client_id, language))
 
     def disconnect(self, client_id: str):
         if client_id in self.active_connections:
@@ -159,6 +169,7 @@ class ConnectionManager:
                     await self.send_message(client_id, {
                         'type': 'new_message',
                         'message': {
+                            'id': msg_id,
                             'text': msg_data[b'text'].decode(),
                             'sender': msg_data[b'sender'].decode(),
                             'timestamp': msg_data[b'timestamp'].decode()
@@ -173,51 +184,62 @@ class ConnectionManager:
                 self.disconnect(client_id)
 
     async def send_initial_messages(self, websocket: WebSocket, language: str = "en"):
-        messages = get_messages(language=language)
-        await websocket.send_json({
-            'type': 'initial_messages',
-            'messages': messages[-20:]  # Send last 20 messages
-        })
+        try:
+            # Get all messages without timestamp filter
+            messages = get_messages(language=language, since=None)
+            total_count = len(messages)
+            print(f"Found {total_count} messages for language {language}")
+            
+            # Send all messages (not just last 20)
+            await websocket.send_json({
+                'type': 'initial_messages',
+                'messages': messages,
+                'total_count': total_count
+            })
+        except Exception as e:
+            print(f"Error sending initial messages: {e}")
+            raise
 
 manager = ConnectionManager()
 
+# Revised WebSocket endpoint
 @app.websocket("/ws/messages")
 async def websocket_endpoint(websocket: WebSocket):
-    # Verify WebSocket upgrade header
-    if "upgrade" not in websocket.headers.get("connection", "").lower():
-        await websocket.close(code=status.WS_1002_PROTOCOL_ERROR)
-        return
-        
     await websocket.accept()
     client_id = None
     
     try:
-        # Wait for auth message
+        # Wait for auth message first
         data = await websocket.receive_json()
         if data.get("type") != "auth":
             await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
             return
             
-        # Validate token
-        token = data.get("token")
-        if not token:
+        try:
+            payload = await keycloak.verify_token(data["token"])
+            client_id = payload.get("sub") or str(uuid.uuid4())
+            await websocket.send_json({"type": "auth-success"})
+        except Exception as e:
+            await websocket.send_json({
+                "type": "auth-failure",
+                "message": str(e)
+            })
             await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
             return
-            
-        payload = await verify_token(token)
-        client_id = payload.get("sub") or str(uuid.uuid4())
-        
-        # Send auth confirmation
-        await websocket.send_json({"type": "auth-success"})
-        
+
         # Get client's preferred language
-        language = websocket.headers.get("accept-language", "en").split(',')[0]
-        
-        # Connect and send initial messages
-        await manager.connect(websocket, client_id)
-        await manager.send_initial_messages(websocket, language)
-        
-        # Keep connection alive
+        language = "en"  # default
+        if "accept-language" in websocket.headers:
+            language = websocket.headers["accept-language"].split(',')[0]
+
+        # Send initial messages
+        messages = get_messages(language=language)
+        await websocket.send_json({
+            "type": "initial-messages",
+            "messages": [{**msg.dict(), "id": msg_id} for msg_id, msg in zip(message_ids, messages)]
+        })
+
+        # Main message loop
         while True:
             data = await websocket.receive_json()
             if data.get("type") == "message":
@@ -226,9 +248,9 @@ async def websocket_endpoint(websocket: WebSocket):
                     sender=payload.get("preferred_username", "anonymous"),
                     timestamp=datetime.now(timezone.utc)
                 )
-                store_message(message)
+                store_message(message, language)
                 
-    except (JWTError, WebSocketDisconnect):
+    except WebSocketDisconnect:
         if client_id:
             manager.disconnect(client_id)
     except Exception as e:
