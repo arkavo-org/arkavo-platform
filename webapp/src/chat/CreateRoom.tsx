@@ -1,51 +1,42 @@
 import React, { useState } from 'react';
-import '../css/CreateRoom.css';
 import { useNavigate } from 'react-router-dom';
-import { fetchRooms, fetchPublicRooms, joinRoom } from './Utils'; // Import joinRoom function
+import { useKeycloak } from '@react-keycloak/web';
+import '../css/ChatPage.css';
 
 const CreateRoom: React.FC = () => {
     const navigate = useNavigate();
+    const { keycloak } = useKeycloak();
     const [roomName, setRoomName] = useState('');
-    const [roomTopic, setRoomTopic] = useState('');
-    const [roomVisibility, setRoomVisibility] = useState('private_chat');
-    const [error, setError] = useState<string | null>(null);
+    const [isPublic, setIsPublic] = useState(true);
+    const [error, setError] = useState('');
 
     const handleCreateRoom = async (e: React.FormEvent) => {
-        e.preventDefault(); // Prevent default form submission behavior
-
-        const synapseBaseUrl = import.meta.env.VITE_SYNAPSE_BASE_URL;
-
-        const accessToken = localStorage.getItem('matrixAccessToken');
-        if (!accessToken) {
-            setError("Authentication token not found. Please log in again.");
+        e.preventDefault();
+        
+        if (!roomName.trim()) {
+            setError('Room name is required');
             return;
         }
 
-        const requestBody = {
-            name: roomName,
-            topic: roomTopic,
-            preset: roomVisibility, // "private_chat" or "public_chat"
-        };
-
         try {
-            const response = await fetch(`https://${synapseBaseUrl}/_matrix/client/v3/createRoom`, {
+            const response = await fetch(`${import.meta.env.VITE_USERS_API_URL}/rooms`, {
                 method: 'POST',
                 headers: {
-                    Authorization: `Bearer ${accessToken}`,
                     'Content-Type': 'application/json',
+                    Authorization: `Bearer ${keycloak.token}`
                 },
-                body: JSON.stringify(requestBody),
+                body: JSON.stringify({
+                    name: roomName,
+                    isPublic: isPublic
+                })
             });
 
-            if (!response.ok) {
-                throw new Error(`Failed to create room: ${response.statusText}`);
+            if (response.ok) {
+                const data = await response.json();
+                navigate(`/room/${data.room_id}`);
+            } else {
+                setError('Failed to create room');
             }
-
-            const data = await response.json();
-            console.log("Room created:", data);
-
-            // Redirect to the chat page
-            navigate('/chat');
         } catch (error) {
             console.error("Error creating room:", error);
             setError("Failed to create room. Please try again.");
@@ -71,23 +62,13 @@ const CreateRoom: React.FC = () => {
                         required
                     />
                 </label>
-                <label>
-                    Room Topic:
+                <label className="room-visibility">
                     <input
-                        type="text"
-                        value={roomTopic}
-                        onChange={(e) => setRoomTopic(e.target.value)}
+                        type="checkbox"
+                        checked={isPublic}
+                        onChange={(e) => setIsPublic(e.target.checked)}
                     />
-                </label>
-                <label>
-                    Room Visibility:
-                    <select
-                        value={roomVisibility}
-                        onChange={(e) => setRoomVisibility(e.target.value)}
-                    >
-                        <option value="public_chat">Public</option>
-                        <option value="private_chat">Private</option>
-                    </select>
+                    Public Room
                 </label>
                 <button type="submit">Create Room</button>
                 <button type="button" onClick={handleExit} className="exit-button">

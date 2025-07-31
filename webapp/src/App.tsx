@@ -2,15 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { BrowserRouter as Router } from 'react-router-dom';
 import AppRoutes from './AppRoutes';
 import { createRoot } from 'react-dom/client';
-import Keycloak from 'keycloak-js';
 import { ReactKeycloakProvider } from '@react-keycloak/web';
-
-// Keycloak instance
-const keycloak = new Keycloak({
-  url: import.meta.env.VITE_KEYCLOAK_SERVER_URL,
-  realm: import.meta.env.VITE_KEYCLOAK_REALM,
-  clientId: import.meta.env.VITE_KEYCLOAK_CLIENT_ID,
-});
+import keycloak from './keycloak';
 
 const App: React.FC = () => {
   const [darkMode, setDarkMode] = useState(localStorage.getItem('darkMode') === 'true');

@@ -9,12 +9,26 @@ here = os.path.abspath(os.path.dirname(__file__))
 def writeViteEnv(env, output_file=os.path.join(here, "webapp", ".env")):
     print("Writing environment file for web app")
     # Open the file for writing
+    envstring = ""
+    for key, value in env.items():
+        if not key.startswith("__") and isinstance(value, (str, int, float)):
+            envstring += f"{key}={value}\n"
+
     with open(output_file, "w") as f:
-        for key, value in env.items():
-            if not key.startswith("__") and isinstance(value, (str, int, float)):
-                f.write(f"{key}={value}\n")
+        f.write(envstring)
 
     print(f"Environment variables have been written to {output_file}")
+
+    pyoutfile = os.path.join(here, "users", "env.py")
+
+    envstring = ""
+    for key, value in env.items():
+        if not key.startswith("__") and isinstance(value, (str, int, float)):
+            envstring += f'{key}="{value}"\n'
+    with open(pyoutfile, "w+") as f:
+        f.write(envstring)
+
+    print(f"Environment variables have been written to {pyoutfile}")
 
 
 def substitutions(currdir, env): 

@@ -16,25 +16,29 @@ from datetime import datetime, timezone
 import datetime as dt
 from jose import jwt, JWTError, jwk
 import requests
+import redis
+import keycloak
 
-# Security scheme for JWT tokens
-security = HTTPBearer()
-from typing import Optional, List, Dict
-from datetime import datetime, timezone
-import datetime as dt
-from jose import jwt, JWTError, jwk
-import requests
 from sqlalchemy import create_engine, Column, String, Text, text
 from sqlalchemy import inspect
 from sqlalchemy.orm import declarative_base, sessionmaker, Session
-import env
+
+# Add parent directory to sys.path
+import sys
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+from env import REDIS_PASSWORD, POSTGRES_PASSWORD
 
 # PostgreSQL setup
-SQLALCHEMY_DATABASE_URL = f"postgresql://postgres:{env.postgres_pw}@usersdb/postgres"
+SQLALCHEMY_DATABASE_URL = f"postgresql://postgres:{POSTGRES_PASSWORD}@usersdb/postgres"
 engine = create_engine(SQLALCHEMY_DATABASE_URL)
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 Base = declarative_base()
 current_dir = os.path.dirname(os.path.abspath(__file__))
+
+# FastAPI app setup
+app = FastAPI()
+# Security scheme for JWT tokens
+security = HTTPBearer()
 
 # Database models
 class DBUser(Base):
@@ -87,6 +91,11 @@ class Message(BaseModel):
 
 messages_all_languages: List[Message] = []
 messages_by_language = {}
+
+class Room(BaseModel):
+    name: str
+    isPublic: bool
+    id: str = None
 
 class ConnectionManager:
     def __init__(self):
@@ -152,8 +161,6 @@ async def translate_message_async(
         print(f"Failed to translate message from {source_lang} to {lang_code}: {e}")
         return lang_code, None
 
-# FastAPI app
-app = FastAPI()
 
 # Fetch LibreTranslate languages on startup
 @app.on_event("startup")
@@ -323,137 +330,276 @@ def update_user(
 async def get_profile(current_user: dict = Depends(get_current_user)):
     return {"message": "Profile endpoint", "user": current_user}
 
-# Message endpoints
-@app.post("/messages")
-async def create_message(
-    message: Message,
-    current_user: dict = Depends(get_current_user)
-):
-    # Set metadata
-    message.sender = current_user.get("preferred_username", "anonymous")
-    message.timestamp = datetime.now(timezone.utc)
-    messages_all_languages.append(message)
+def get_room_key(room_id: str) -> str:
+    return f"room:{room_id}"
 
-    # Detect source language
-    try:
-        async with aiohttp.ClientSession() as session:
-            async with session.post(
-                "http://libretranslate:5000/detect",
-                json={"q": message.text}
-            ) as detect_response:
-                detect_response.raise_for_status()
-                detect_data = await detect_response.json()
-                source_lang = detect_data[0]["language"]
+def get_users_key(room_id: str) -> str:
+    return f"room:{room_id}:users"
 
-            # Translate to all languages concurrently
-            tasks = [
-                translate_message_async(session, lang_code, source_lang, message)
-                for lang_code in messages_by_language.keys()
-            ]
-            results = await asyncio.gather(*tasks)
+def get_pubsub_key(room_id: str) -> str:
+    return f"room:{room_id}:pubsub"
 
-            # Save translations
-            for lang_code, translated_msg in results:
-                if translated_msg is not None:
-                    messages_by_language[lang_code].append(translated_msg)
+def check_room_access(room_id: str, user_id: str) -> bool:
+    """Check if user has access to room (public or invited)"""
+    is_public = redis_client.hget(get_room_key(room_id), "is_public")
+    if is_public and is_public.decode() == "1":
+        return True
+    return redis_client.sismember(get_users_key(room_id), user_id)
 
-    except Exception as e:
-        print(f"Translation flow failed: {e}")
-
-    return {"status": "Message received and translated"}
-
-@app.get("/messages")
-async def get_messages(since: Optional[str] = None):
-    if since:
-        try:
-            if since.endswith("Z"):
-                since = since.replace("Z", "+00:00")
-            since_dt = datetime.fromisoformat(since)
-            filtered = [msg for msg in messages_all_languages if msg.timestamp >= since_dt]
-            return {"messages": filtered}
-        except ValueError:
-            raise HTTPException(
-                status_code=400,
-                detail="Invalid datetime format. Use ISO format (YYYY-MM-DDTHH:MM:SS[.ffffff][Z or [±]HH:MM])"
-            )
-    return {"messages": messages_all_languages}
-
-@app.get("/languages")
-async def get_languages(current_user: dict = Depends(get_current_user)):
-    """Get list of available languages"""
-    return {"languages": list(messages_by_language.keys())}
-
-@app.get("/messages/{language_code}")
-async def get_messages_by_language(
-    language_code: str,
-    since: Optional[str] = None,
-    current_user: dict = Depends(get_current_user)
-):
-    """Get messages in a specific language"""
-    if language_code not in messages_by_language:
-        raise HTTPException(status_code=404, detail="Language not supported")
+@app.post("/rooms")
+async def create_room(room: Room, current_user: dict = Depends(get_current_user)):
+    """Create a new chat room"""
+    room_id = str(uuid.uuid4())
     
-    messages = messages_by_language[language_code]
-    if since:
-        try:
-            if since.endswith("Z"):
-                since = since.replace("Z", "+00:00")
-            since_dt = datetime.fromisoformat(since)
-            filtered = [msg for msg in messages if msg.timestamp >= since_dt]
-            return {"messages": filtered}
-        except ValueError:
-            raise HTTPException(
-                status_code=400,
-                detail="Invalid datetime format. Use ISO format (YYYY-MM-DDTHH:MM:SS[.ffffff][Z or [±]HH:MM])"
-            )
-    return {"messages": messages}
+    # Store room data in Redis
+    redis_client.hset(
+        get_room_key(room_id),
+        mapping={
+            "id": room_id,
+            "name": room.name,
+            "is_public": "1" if room.isPublic else "0",
+            "creator": current_user.get("sub")
+        }
+    )
+    
+    # Add creator to room's user set
+    redis_client.sadd(get_users_key(room_id), current_user.get("sub"))
+    
+    return {"id": room_id, "name": room.name, "isPublic": room.isPublic}
 
-@app.websocket("/ws/messages")
-async def websocket_endpoint(websocket: WebSocket):
-    if "upgrade" not in websocket.headers.get("connection", "").lower():
-        await websocket.close(code=status.WS_1002_PROTOCOL_ERROR)
-        return
-        
+@app.get("/rooms")
+async def get_rooms(current_user: dict = Depends(get_current_user)):
+    """Get list of public rooms + private rooms user is invited to"""
+    user_id = current_user.get("sub")
+    all_rooms = []
+    
+    # Get all room keys
+    room_keys = redis_client.keys("room:*")
+    for key in room_keys:
+        if key.decode().endswith(":users") or key.decode().endswith(":pubsub"):
+            continue
+            
+        room_id = key.decode().split(":")[1]
+        room_data = redis_client.hgetall(key)
+        if room_data:
+            is_public = room_data.get(b"is_public", b"0") == b"1"
+            if is_public or check_room_access(room_id, user_id):
+                all_rooms.append({
+                    "id": room_id,
+                    "name": room_data.get(b"name", b"").decode(),
+                    "is_public": is_public
+                })
+    
+    return {"rooms": all_rooms}
+
+@app.post("/rooms/{room_id}/join")
+async def join_room(room_id: str, current_user: dict = Depends(get_current_user)):
+    """Validate and add user to room"""
+    user_id = current_user.get("sub")
+    if not check_room_access(room_id, user_id):
+        raise HTTPException(status_code=403, detail="Access denied")
+    
+    # Add user to room's Redis set
+    redis_client.sadd(get_users_key(room_id), user_id)
+    return {"status": "joined"}
+
+@app.post("/rooms/{room_id}/message")
+async def post_message(room_id: str, message: Message, current_user: dict = Depends(get_current_user)):
+    """Post message to room"""
+    user_id = current_user.get("sub")
+    if not check_room_access(room_id, user_id):
+        raise HTTPException(status_code=403, detail="Access denied")
+    
+    # Set message metadata
+    message.user = current_user.get("preferred_username", "anonymous")
+    message.timestamp = datetime.now(timezone.utc)
+    
+    # Publish to Redis
+    redis_client.publish(get_pubsub_key(room_id), message.json())
+    return {"status": "message sent"}
+
+@app.post("/rooms/{room_id}/invite")
+async def invite_user(room_id: str, user_id: str, current_user: dict = Depends(get_current_user)):
+    """Invite user to private room"""
+    # In real implementation, add owner check here
+    redis_client.sadd(get_users_key(room_id), user_id)
+    return {"status": "user invited"}
+
+@app.websocket("/ws/rooms/{room_id}")
+async def websocket_endpoint(websocket: WebSocket, room_id: str):
     await websocket.accept()
     client_id = None
     
     try:
+        # Authentication
         data = await websocket.receive_json()
         if data.get("type") != "auth":
             await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
             return
             
-        token = data.get("token")
-        if not token:
+        try:
+            payload = await keycloak.verify_token(data["token"])
+            client_id = payload.get("sub")
+            if not check_room_access(room_id, client_id):
+                await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
+                return
+                
+            await manager.connect(websocket, client_id, room_id)
+            await websocket.send_json({"type": "auth-success"})
+        except Exception as e:
+            await websocket.send_json({
+                "type": "auth-failure",
+                "message": str(e)
+            })
+            await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
+            return
+
+        while True:
+            data = await websocket.receive_json()
+            if data.get("type") == "message":
+                await post_message(room_id, Message(**data), payload)
+                
+    except WebSocketDisconnect:
+        if client_id:
+            manager.disconnect(client_id)
+    except Exception as e:
+        print(f"WebSocket error: {e}")
+        if client_id:
+            manager.disconnect(client_id)
+        await websocket.close(code=status.WS_1011_INTERNAL_ERROR)
+
+from fastapi import FastAPI, Depends, HTTPException, status, WebSocket, WebSocketDisconnect
+import os
+import uuid
+import redis
+from fastapi.security import HTTPBearer
+from pydantic import BaseModel
+from typing import Optional, List
+from datetime import datetime, timezone
+from jose import jwt, JWTError
+import keycloak
+
+# Redis setup
+redis_client = redis.Redis(host='redis_messaging', port=6379, db=0, password=REDIS_PASSWORD)
+
+
+def get_room_key(room_id: str) -> str:
+    return f"room:{room_id}"
+
+def get_users_key(room_id: str) -> str:
+    return f"room:{room_id}:users"
+
+def get_pubsub_key(room_id: str) -> str:
+    return f"room:{room_id}:pubsub"
+
+def check_room_access(room_id: str, user_id: str) -> bool:
+    """Check if user has access to room (public or invited)"""
+    is_public = redis_client.hget(get_room_key(room_id), "is_public")
+    if is_public and is_public.decode() == "1":
+        return True
+    return redis_client.sismember(get_users_key(room_id), user_id)
+
+@app.get("/rooms")
+async def get_rooms(current_user: dict = Depends(get_current_user)):
+    """Get list of public rooms + private rooms user is invited to"""
+    user_id = current_user.get("sub")
+    all_rooms = []
+    
+    # Get all room keys
+    room_keys = redis_client.keys("room:*")
+    for key in room_keys:
+        if key.decode().endswith(":users") or key.decode().endswith(":pubsub"):
+            continue
+            
+        room_id = key.decode().split(":")[1]
+        room_data = redis_client.hgetall(key)
+        if room_data:
+            is_public = room_data.get(b"is_public", b"0") == b"1"
+            if is_public or check_room_access(room_id, user_id):
+                all_rooms.append({
+                    "id": room_id,
+                    "name": room_data.get(b"name", b"").decode(),
+                    "is_public": is_public
+                })
+    
+    return {"rooms": all_rooms}
+
+@app.post("/rooms/{room_id}/join")
+async def join_room(room_id: str, current_user: dict = Depends(get_current_user)):
+    """Validate and add user to room"""
+    user_id = current_user.get("sub")
+    if not check_room_access(room_id, user_id):
+        raise HTTPException(status_code=403, detail="Access denied")
+    
+    # Add user to room's Redis set
+    redis_client.sadd(get_users_key(room_id), user_id)
+    return {"status": "joined"}
+
+@app.post("/rooms/{room_id}/message")
+async def post_message(room_id: str, message: Message, current_user: dict = Depends(get_current_user)):
+    """Post message to room"""
+    user_id = current_user.get("sub")
+    if not check_room_access(room_id, user_id):
+        raise HTTPException(status_code=403, detail="Access denied")
+    
+    # Set message metadata
+    message.user = current_user.get("preferred_username", "anonymous")
+    message.timestamp = datetime.now(timezone.utc)
+    
+    # Publish to Redis
+    redis_client.publish(get_pubsub_key(room_id), message.json())
+    return {"status": "message sent"}
+
+@app.post("/rooms/{room_id}/invite")
+async def invite_user(room_id: str, user_id: str, current_user: dict = Depends(get_current_user)):
+    """Invite user to private room"""
+    # In real implementation, add owner check here
+    redis_client.sadd(get_users_key(room_id), user_id)
+    return {"status": "user invited"}
+
+@app.websocket("/ws/rooms/{room_id}")
+async def websocket_endpoint(websocket: WebSocket, room_id: str):
+    await websocket.accept()
+    client_id = None
+    
+    try:
+        # Authentication
+        data = await websocket.receive_json()
+        if data.get("type") != "auth":
             await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
             return
             
-        payload = await keycloak.verify_token(token)
-        client_id = payload.get("sub") or str(uuid.uuid4())
-        
-        await websocket.send_json({"type": "auth-success"})
-        
-        language = websocket.headers.get("accept-language", "en")
-        await manager.send_initial_messages(websocket, language)
-        
+        try:
+            payload = await keycloak.verify_token(data["token"])
+            client_id = payload.get("sub")
+            if not check_room_access(room_id, client_id):
+                await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
+                return
+                
+            await manager.connect(websocket, client_id, room_id)
+            await websocket.send_json({"type": "auth-success"})
+        except Exception as e:
+            await websocket.send_json({
+                "type": "auth-failure",
+                "message": str(e)
+            })
+            await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
+            return
+
         while True:
             data = await websocket.receive_json()
-            
             if data.get("type") == "message":
-                message = Message(
-                    text=data["text"],
-                    sender=payload.get("preferred_username", "anonymous"),
-                    timestamp=datetime.now(timezone.utc)
-                )
-                messages_all_languages.append(message)
+                await post_message(room_id, Message(**data), payload)
                 
-    except JWTError:
-        await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
     except WebSocketDisconnect:
-        manager.disconnect(client_id)
+        if client_id:
+            manager.disconnect(client_id)
     except Exception as e:
         print(f"WebSocket error: {e}")
-        manager.disconnect(client_id)
+        if client_id:
+            manager.disconnect(client_id)
+        await websocket.close(code=status.WS_1011_INTERNAL_ERROR)
+
 
 if __name__ == "__main__":
     import uvicorn

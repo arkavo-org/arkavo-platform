@@ -4,7 +4,6 @@ import { Routes, Route } from 'react-router-dom';
 import Navbar from './Navbar';
 import Feed from './Feed';
 import VideoFeed from './VideoFeed';
-//import SignIn from './SignIn';
 import Privacy from './Privacy';
 import ExploreRooms from './chat/ExploreRooms';
 import CreateRoom from './chat/CreateRoom';
@@ -13,27 +12,16 @@ import Room from './chat/Room';
 import ChatPage from './chat/ChatPage';
 import APIChat from './APIChat';
 import Settings from './Settings';
-//import VideoRoom from './VideoRoom';
-//import AIView from './AIView';
-//import AICompute from './AICompute';
 import Events from './Events';
 import TDF from './TDF';
 import './css/App.css';
 import Bluesky from './Bluesky';
  
-interface AppRoutesProps { 
-    darkMode: boolean;
-    onToggleDarkMode: () => void;
-}
+interface AppRoutesProps {}
 
-/*
-<button onClick={onToggleDarkMode}>
-{darkMode ? '☀️' : '🌒'}
-</button>*/
-
-const AppRoutes: React.FC<AppRoutesProps> = ({ darkMode, onToggleDarkMode }) => {
+const AppRoutes: React.FC<AppRoutesProps> = () => {
     return (
-        <div id="fullpage" className={darkMode ? 'dark-mode' : ''}>
+        <div id="fullpage">
             <Navbar />
             <Routes>
                 <Route path="/" element={<ChatPage />} /> {/* Home route for the feed */}
@@ -44,15 +32,29 @@ const AppRoutes: React.FC<AppRoutesProps> = ({ darkMode, onToggleDarkMode }) => 
                 <Route path="/events" element={<Events />} />
                 <Route path="/feed" element={<Feed />} />
                 <Route path="/navbar" element={<Navbar />} />
-                <Route path="/room/:roomId" element={<Room />} />
+                <Route 
+                  path="/room/:roomId" 
+                  element={<Room roomId="" />} // roomId will be provided by router params
+                />
                 <Route path="/video" element={<VideoFeed />} />
-                <Route path="/explore" element={<ExploreRooms />} />
+                <Route 
+                  path="/explore" 
+                  element={<ExploreRooms onRoomSelect={() => {}} />} 
+                />
                 <Route path="/tdf" element={<TDF />} />
                 <Route path="/apichat" element={<APIChat />} />
-                {/*<Route path="/video" element={<VideoRoom />} />
-                <Route path="/settings" element={<Settings />} />
-                <Route path="/aiview" element={<AIView />} />
-                <Route path="/aicompute" element={<AICompute />} /> */}
+                <Route 
+                  path="/Settings" 
+                  element={
+                    <Settings 
+                      userName="" 
+                      profilePicture="" 
+                      darkMode={false} 
+                      onUpdateName={() => {}} 
+                      onUpdateProfilePicture={() => {}} 
+                    />
+                  } 
+                />
             </Routes>
         </div>
     );

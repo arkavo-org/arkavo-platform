@@ -20,6 +20,7 @@ in_github_actions = os.getenv("GITHUB_ACTIONS") == "true"
 print("Applying env var substitutions in hard-coded .template files")
 util.substitutions(here, env)
 util.writeViteEnv(vars(env))
+
 import subprocess
 # Check if the keys directory exists, if not, generate temporary keys for localhost or production keys
 if not os.path.isdir(env.keys_dir):

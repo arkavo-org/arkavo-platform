@@ -4,7 +4,7 @@ import { useKeycloak } from '@react-keycloak/web';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { faBell, faEnvelope, faCalendar, faBullhorn, faPlusCircle } from '@fortawesome/free-solid-svg-icons';
 import './css/Navbar.css';
-import { loginAndFetchProfile, logoutAndClearProfile, UserProfile } from './keycloakUtils';
+import keycloak, { getUserProfile, logout, UserProfile } from './keycloak';
 import { faLock } from "@fortawesome/free-solid-svg-icons";
 
 const Navbar: React.FC = () => {
@@ -17,7 +17,7 @@ const Navbar: React.FC = () => {
 
   useEffect(() => {
     if (initialized && keycloak.authenticated) {
-      loginAndFetchProfile(keycloak).then((profile) => {
+      getUserProfile().then((profile) => {
         setUserProfile(profile);
         setLoading(false); // Set loading to false when profile is fetched
       }).catch((error) => {
@@ -30,7 +30,7 @@ const Navbar: React.FC = () => {
   }, [initialized, keycloak]);
 
   const handleLogout = () => {
-    logoutAndClearProfile(keycloak);
+    logout();
     setUserProfile(null);
     setShowDropdown(false);
   };
@@ -103,7 +103,7 @@ const Navbar: React.FC = () => {
             )}
           </div>
         ) : (
-          <button onClick={() => loginAndFetchProfile(keycloak)}>Sign In</button>
+          <button onClick={() => keycloak.login()}>Sign In</button>
         )}
       </div>
     </nav>

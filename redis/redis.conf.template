@@ -10,7 +10,7 @@ maxmemory 4gb
 maxmemory-policy allkeys-lru
 
 # Security
-requirepass PamdRkw5Bg5ae73
+requirepass $REDIS_PASSWORD
 
 # Performance tuning
 tcp-keepalive 60

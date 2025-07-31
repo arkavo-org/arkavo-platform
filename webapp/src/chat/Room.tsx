@@ -1,150 +1,117 @@
-import React, { useState, useEffect } from 'react';
-import { useParams } from 'react-router-dom';
-import '../css/Room.css';
-
-interface Room {
-    id: string;
-    name: string;
-}
-
-interface Channel {
-    id: string;
-    name: string;
-}
+import React, { useState, useEffect, useRef } from 'react';
+import { useKeycloak } from '@react-keycloak/web';
+import '../css/ChatPage.css';
 
 interface Message {
-    id: string;
-    content: string;
-    sender: string;
-    timestamp: string;
+  text: string;
+  user: string;
+  timestamp: string;
 }
 
-const Room: React.FC = () => {
-    const { roomId } = useParams<{ roomId: string }>();
-    const [rooms, setRooms] = useState<Room[]>([]);
-    const [channels, setChannels] = useState<Channel[]>([]);
-    const [messages, setMessages] = useState<Message[]>([]);
-    const [selectedChannel, setSelectedChannel] = useState<string | null>(null);
-    const [newMessage, setNewMessage] = useState('');
+interface RoomProps {
+  roomId: string;
+}
 
-    useEffect(() => {
-        // Fetch user rooms
-        fetch('/api/user/rooms') // Replace with actual API endpoint
-            .then((res) => res.json())
-            .then((data) => setRooms(data))
-            .catch((err) => console.error('Failed to fetch rooms:', err));
-    }, []);
+const Room: React.FC<RoomProps> = ({ roomId }) => {
+  const { keycloak } = useKeycloak();
+  const [messages, setMessages] = useState<Message[]>([]);
+  const [newMessage, setNewMessage] = useState('');
+  const [ws, setWs] = useState<WebSocket | null>(null);
+  const messagesEndRef = useRef<HTMLDivElement>(null);
 
-    useEffect(() => {
-        if (roomId) {
-            // Fetch channels for the selected room
-            fetch(`/api/rooms/${roomId}/channels`) // Replace with actual API endpoint
-                .then((res) => res.json())
-                .then((data) => setChannels(data))
-                .catch((err) => console.error('Failed to fetch channels:', err));
+  useEffect(() => {
+    const fetchMessages = async () => {
+      try {
+        const response = await fetch(`${import.meta.env.VITE_USERS_API_URL}/rooms/${roomId}messages`);
+        if (response.ok) {
+          const data = await response.json();
+          setMessages(data.messages);
         }
-    }, [roomId]);
-
-    useEffect(() => {
-        if (selectedChannel) {
-            // Fetch messages for the selected channel
-            fetch(`/api/channels/${selectedChannel}/messages`) // Replace with actual API endpoint
-                .then((res) => res.json())
-                .then((data) => setMessages(data))
-                .catch((err) => console.error('Failed to fetch messages:', err));
-        }
-    }, [selectedChannel]);
-
-    const handleSendMessage = () => {
-        if (newMessage.trim() && selectedChannel) {
-            // Send message to the selected channel
-            fetch(`/api/channels/${selectedChannel}/messages`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ content: newMessage }),
-            })
-                .then(() => {
-                    setMessages((prev) => [
-                        ...prev,
-                        {
-                            id: String(Date.now()),
-                            content: newMessage,
-                            sender: 'You',
-                            timestamp: new Date().toISOString(),
-                        },
-                    ]);
-                    setNewMessage('');
-                })
-                .catch((err) => console.error('Failed to send message:', err));
-        }
+      } catch (error) {
+        console.error('Error fetching messages:', error);
+      }
     };
 
-    return (
-        <div className="room-container">
-            {/* Sidebar for rooms */}
-            <aside className="sidebar">
-                <h2>Rooms</h2>
-                <ul>
-                    {rooms.map((room) => (
-                        <li
-                            key={room.id}
-                            className={room.id === roomId ? 'active' : ''}
-                            onClick={() => window.location.href = `/room/${room.id}`} // Navigate to the room
-                        >
-                            {room.name}
-                        </li>
-                    ))}
-                </ul>
-            </aside>
+    fetchMessages();
 
-            {/* Sidebar for channels */}
-            <aside className="channel-bar">
-                <h2>Channels</h2>
-                <ul>
-                    {channels.map((channel) => (
-                        <li
-                            key={channel.id}
-                            className={channel.id === selectedChannel ? 'active' : ''}
-                            onClick={() => setSelectedChannel(channel.id)}
-                        >
-                            {channel.name}
-                        </li>
-                    ))}
-                </ul>
-            </aside>
+    const socket = new WebSocket(`${import.meta.env.VITE_USERS_WS_URL}/ws/rooms/${roomId}`);
+    
+    socket.onopen = () => {
+      socket.send(JSON.stringify({
+        type: 'auth',
+        token: keycloak.token
+      }));
+    };
 
-            {/* Main content for messages */}
-            <main className="message-content">
-                <h2>Messages</h2>
-                {selectedChannel ? (
-                    <>
-                        <div className="messages">
-                            {messages.map((message) => (
-                                <div key={message.id} className="message">
-                                    <span className="sender">{message.sender}:</span>
-                                    <span className="content">{message.content}</span>
-                                    <span className="timestamp">
-                                        {new Date(message.timestamp).toLocaleTimeString()}
-                                    </span>
-                                </div>
-                            ))}
-                        </div>
-                        <div className="message-input">
-                            <input
-                                type="text"
-                                value={newMessage}
-                                onChange={(e) => setNewMessage(e.target.value)}
-                                placeholder="Type a message..."
-                            />
-                            <button onClick={handleSendMessage}>Send</button>
-                        </div>
-                    </>
-                ) : (
-                    <p>Please select a channel to view messages.</p>
-                )}
-            </main>
+    socket.onmessage = (event) => {
+      const message = JSON.parse(event.data);
+      setMessages(prev => [...prev, message]);
+    };
+
+    setWs(socket);
+
+    return () => {
+      socket.close();
+    };
+  }, [roomId, keycloak.token]);
+
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [messages]);
+
+  const handleSendMessage = () => {
+    if (!newMessage.trim() || !ws) return;
+
+    ws.send(JSON.stringify({
+      type: 'message',
+      text: newMessage
+    }));
+
+    setNewMessage('');
+  };
+
+  const handleKeyPress = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      handleSendMessage();
+    }
+  };
+
+  return (
+    <div className="chat-area">
+      <div className="room-item selected">
+        <div className="room-avatar">{roomId.charAt(0).toUpperCase()}</div>
+        <div>
+          <h4>Room: {roomId}</h4>
         </div>
-    );
+      </div>
+      
+      <div className="rooms-list">
+        {messages.map((msg, index) => (
+          <div key={index} className="room-item">
+            <div className="room-avatar">{msg.user.charAt(0).toUpperCase()}</div>
+            <div>
+              <div className="message-user">{msg.user}</div>
+              <div className="message-text">{msg.text}</div>
+              <div className="message-time">{new Date(msg.timestamp).toLocaleTimeString()}</div>
+            </div>
+          </div>
+        ))}
+        <div ref={messagesEndRef} />
+      </div>
+
+      <div className="add-room" style={{marginTop: '20px', display: 'flex'}}>
+        <textarea
+          value={newMessage}
+          onChange={(e) => setNewMessage(e.target.value)}
+          onKeyDown={handleKeyPress}
+          placeholder="Type a message..."
+          style={{flex: 1, marginRight: '10px', padding: '10px'}}
+        />
+        <button onClick={handleSendMessage} style={{padding: '10px 20px'}}>Send</button>
+      </div>
+    </div>
+  );
 };
 
 export default Room;

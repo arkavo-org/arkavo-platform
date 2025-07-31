@@ -1,5 +1,5 @@
 import React, { useState, useEffect, ChangeEvent } from 'react';
-import './Settings.css';
+import './css/Settings.css';
 
 interface SettingsProps {
     userName: string;

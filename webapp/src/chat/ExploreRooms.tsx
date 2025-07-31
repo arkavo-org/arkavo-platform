@@ -1,116 +1,84 @@
 import React, { useState, useEffect } from 'react';
-import '../css/ExploreRooms.css';
-import { useNavigate } from 'react-router-dom';
 import { useKeycloak } from '@react-keycloak/web';
-import { handleLogin } from './ChatAuth';
-import { fetchRooms, fetchPublicRooms, joinRoom } from './Utils'; // Import necessary functions
+import '../css/ExploreRooms.css';
 
-const ExploreRooms: React.FC = () => {
-    const { keycloak, initialized } = useKeycloak();
-    const navigate = useNavigate();
-    const [loading, setLoading] = useState(true);
-    const [error, setError] = useState<string | null>(null);
-    const [localRooms, setLocalRooms] = useState<any[]>([]);
-    const [publicRooms, setPublicRooms] = useState<any[]>([]);
+interface Room {
+  id: string;
+  name: string;
+  is_public: boolean;
+}
 
-    const synapseBaseUrl = import.meta.env.VITE_SYNAPSE_BASE_URL;
+interface ExploreRoomsProps {
+  onRoomSelect: (roomId: string) => void;
+}
 
-    // Fetch local and public rooms
-    const fetchRoomsData = async (token: string) => {
-        try {
-            // Fetch local rooms
-            const localRoomsData = await fetchPublicRooms(token, synapseBaseUrl, false);
-            setLocalRooms(localRoomsData);
+const ExploreRooms: React.FC<ExploreRoomsProps> = ({ onRoomSelect }) => {
+  const { keycloak } = useKeycloak();
+  const [rooms, setRooms] = useState<Room[]>([]);
+  const [loading, setLoading] = useState(true);
 
-            // Fetch federated public rooms
-            const publicRoomsData = await fetchPublicRooms(token, synapseBaseUrl, true);
-            setPublicRooms(publicRoomsData);
-        } catch (err) {
-            console.error('Error fetching rooms:', err);
-            setError(err instanceof Error ? err.message : 'Unknown error occurred');
-        } finally {
-            setLoading(false);
+  useEffect(() => {
+    const fetchRooms = async () => {
+      try {
+        const response = await fetch('http://localhost:8000/rooms', {
+          headers: {
+            Authorization: `Bearer ${keycloak.token}`
+          }
+        });
+        
+        if (response.ok) {
+          const data = await response.json();
+          setRooms(data.rooms);
         }
+      } catch (error) {
+        console.error('Error fetching rooms:', error);
+      } finally {
+        setLoading(false);
+      }
     };
 
-    // Join a room
-    const handleJoinRoom = async (roomId: string) => {
-        const accessToken = localStorage.getItem('matrixAccessToken');
-        if (!accessToken) {
-            handleLogin();
-            return;
+    if (keycloak.authenticated) {
+      fetchRooms();
+    }
+  }, [keycloak.authenticated, keycloak.token]);
+
+  const handleJoinRoom = async (roomId: string) => {
+    try {
+      const response = await fetch(`http://localhost:8000/rooms/${roomId}/join`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${keycloak.token}`
         }
+      });
 
-        try {
-            await joinRoom(accessToken, synapseBaseUrl, roomId);
+      if (response.ok) {
+        onRoomSelect(roomId);
+      }
+    } catch (error) {
+      console.error('Error joining room:', error);
+    }
+  };
 
-            // Save the room ID to localStorage
-            localStorage.setItem('selectedRoom', roomId);
+  if (loading) {
+    return <div>Loading rooms...</div>;
+  }
 
-            // Navigate back to the chat page
-            navigate('/chat');
-        } catch (err) {
-            console.error('Error joining room:', err);
-            setError(err instanceof Error ? err.message : 'Unknown error occurred');
-        }
-    };
-
-    useEffect(() => {
-        const initialize = async () => {
-            const storedAccessToken = localStorage.getItem('matrixAccessToken');
-
-            if (!storedAccessToken) {
-                handleLogin();
-                return;
-            }
-
-            setLoading(true);
-            await fetchRoomsData(storedAccessToken);
-        };
-
-        initialize();
-    }, [navigate, synapseBaseUrl]);
-
-    const handleCreateRoomClick = () => {
-        navigate('/create-room'); // Navigate to the room creation page
-    };
-
-    if (loading) return <div>Loading rooms...</div>;
-    if (error) return <div>Error: {error}</div>;
-
-    return (
-        <div id="public-rooms-container">
-            <h1>Explore Rooms</h1>
-            <div className="create-room-box" onClick={handleCreateRoomClick}>
-                <div className="plus-sign">+</div>
-                <p>Create Room</p>
+  return (
+    <div className="chat-area">
+      <h3>Available Rooms</h3>
+      <div className="rooms-list">
+        {rooms.map(room => (
+          <div key={room.id} className="room-item" onClick={() => handleJoinRoom(room.id)}>
+            <div className="room-avatar">{room.name.charAt(0).toUpperCase()}</div>
+            <div>
+              <h4>{room.name}</h4>
+              <span>{room.is_public ? 'Public' : 'Private'}</span>
             </div>
-
-            {/* Local Rooms Section */}
-            <h2>Rooms on This Server</h2>
-            <ul>
-                {publicRooms.map((room) => (
-                    <li
-                        key={room.room_id}
-                        className="room-item"
-                        onClick={() => handleJoinRoom(room.room_id)}
-                    >
-                        <div>
-                            <h2>{room.name || room.canonical_alias || 'Unnamed Room'}</h2>
-                            {room.avatar_url && (
-                                <img
-                                    src={`https://${synapseBaseUrl}/_matrix/media/r0/thumbnail/${room.avatar_url.replace('mxc://', '')}?width=40&height=40&method=crop`}
-                                    alt={room.name || room.canonical_alias}
-                                />
-                            )}
-                            <p>{room.topic || 'No topic provided'}</p>
-                            <small>Members: {room.num_joined_members}</small>
-                        </div>
-                    </li>
-                ))}
-            </ul>
-        </div>
-    );
+          </div>
+        ))}
+      </div>
+    </div>
+  );
 };
 
 export default ExploreRooms;

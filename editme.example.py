@@ -10,6 +10,7 @@ PROTOCOL_USER_WEBSITE = "https://" + USER_WEBSITE
 USER_EMAIL = "youremail@example.com"
 VITE_LOGO_URL="/favicon.png"
 KEYCLOAK_ADMIN_PASSWORD = "changeme"
+POSTGRES_PASSWORD = "changeme"
 SERVICES_TO_RUN = [
     "keycloak",    # Identity and Access Management (accounts)
     "org",         # Additional tools for the Organization in Go
@@ -23,6 +24,7 @@ SERVICES_TO_RUN = [
     "element",     # Social Media - Matrix Client
     "webapp",      # Social Media - Our Client
     "webapp_build",# Social Media - Our Client Production Build
+    "users"
 ]
 
 distinguisher = ""  # If you are running multiple deployments on the same machine, you can distinguish them here
@@ -55,3 +57,4 @@ EXTRACT_FOLDER = "<YOUR SECRET HERE>"  # Name of the folder after extraction
 
 BLUESKY_HANDLE = "<YOUR SECRET HERE>"
 BLUESKY_PASSWORD = "<YOUR SECRET HERE>"
+REDIS_PASSWORD = "PamdRkw5Bg5ae73"
