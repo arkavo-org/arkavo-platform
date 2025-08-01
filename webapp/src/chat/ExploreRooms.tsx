@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useKeycloak } from '@react-keycloak/web';
+import { useAuth } from '../context/AuthContext';
 import '../css/ExploreRooms.css';
 
 interface Room {
@@ -13,16 +13,16 @@ interface ExploreRoomsProps {
 }
 
 const ExploreRooms: React.FC<ExploreRoomsProps> = ({ onRoomSelect }) => {
-  const { keycloak } = useKeycloak();
+  const { keycloak, isAuthenticated } = useAuth();
   const [rooms, setRooms] = useState<Room[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     const fetchRooms = async () => {
       try {
-        const response = await fetch('http://localhost:8000/rooms', {
+        const response = await fetch(`${import.meta.env.VITE_USERS_API_URL}/rooms`, {
           headers: {
-            Authorization: `Bearer ${keycloak.token}`
+            Authorization: `Bearer ${keycloak?.token}`
           }
         });
         
@@ -37,17 +37,17 @@ const ExploreRooms: React.FC<ExploreRoomsProps> = ({ onRoomSelect }) => {
       }
     };
 
-    if (keycloak.authenticated) {
+    if (isAuthenticated && keycloak?.token) {
       fetchRooms();
     }
-  }, [keycloak.authenticated, keycloak.token]);
+  }, [isAuthenticated, keycloak?.token]);
 
   const handleJoinRoom = async (roomId: string) => {
     try {
-      const response = await fetch(`http://localhost:8000/rooms/${roomId}/join`, {
+      const response = await fetch(`${import.meta.env.VITE_USERS_API_URL}/rooms/${roomId}/join`, {
         method: 'POST',
         headers: {
-          Authorization: `Bearer ${keycloak.token}`
+          Authorization: `Bearer ${keycloak?.token}`
         }
       });
 

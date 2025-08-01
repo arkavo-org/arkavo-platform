@@ -49,7 +49,6 @@ const AppRoutes: React.FC<AppRoutesProps> = () => {
                     <Settings 
                       userName="" 
                       profilePicture="" 
-                      darkMode={false} 
                       onUpdateName={() => {}} 
                       onUpdateProfilePicture={() => {}} 
                     />

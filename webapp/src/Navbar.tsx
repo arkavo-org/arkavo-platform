@@ -1,50 +1,42 @@
-import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { useKeycloak } from '@react-keycloak/web';
-import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
-import { faBell, faEnvelope, faCalendar, faBullhorn, faPlusCircle } from '@fortawesome/free-solid-svg-icons';
-import './css/Navbar.css';
-import keycloak, { getUserProfile, logout, UserProfile } from './keycloak';
+import React, { useState, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
+import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
+import {
+  faBell,
+  faEnvelope,
+  faCalendar,
+  faBullhorn,
+  faPlusCircle,
+} from "@fortawesome/free-solid-svg-icons";
+import "./css/Navbar.css";
+import { useAuth } from "./context/AuthContext";
 import { faLock } from "@fortawesome/free-solid-svg-icons";
 
 const Navbar: React.FC = () => {
-  const { keycloak, initialized } = useKeycloak(); // Access keycloak from ReactKeycloakProvider
+  const { isAuthenticated, userProfile, login, logout } = useAuth();
   const navigate = useNavigate();
-  const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
   const [showDropdown, setShowDropdown] = useState(false);
-  const [searchQuery, setSearchQuery] = useState('');
-  const [loading, setLoading] = useState(true); // Loading state
+  const [searchQuery, setSearchQuery] = useState("");
 
-  useEffect(() => {
-    if (initialized && keycloak.authenticated) {
-      getUserProfile().then((profile) => {
-        setUserProfile(profile);
-        setLoading(false); // Set loading to false when profile is fetched
-      }).catch((error) => {
-        console.error('Error fetching user profile:', error);
-        setLoading(false); // Set loading to false even if an error occurs
-      });
-    } else {
-      setLoading(false); // Set loading to false if not authenticated
-    }
-  }, [initialized, keycloak]);
+  // Removed useEffect since userProfile is now managed by AuthProvider
 
   const handleLogout = () => {
     logout();
-    setUserProfile(null);
     setShowDropdown(false);
   };
-
-  if (loading) {
-    return <div>Loading...</div>; // Show loading state while fetching profile
-  }
 
   return (
     <nav className="navbar">
       <div className="logo-container">
-        <img src={import.meta.env.VITE_LOGO_URL} className="icon" alt="Arkavo logo" />
+        <img
+          src={import.meta.env.VITE_LOGO_URL}
+          className="icon"
+          alt="Arkavo logo"
+        />
         <div className="navbar-logo">
-          <a href="/" className="home-link">{import.meta.env.VITE_BRAND_NAME}</a>
+          <a href="/" className="home-link">
+            {import.meta.env.VITE_BRAND_NAME}
+          </a>
         </div>
       </div>
       <form className="navbar-search">
@@ -57,25 +49,25 @@ const Navbar: React.FC = () => {
         />
       </form>
       <div className="navbar-links">
-        {userProfile ? (
+        {isAuthenticated && userProfile ? (
           <div className="profile-elements">
             <FontAwesomeIcon
               icon={faPlusCircle}
               className="icon plus-icon"
               title="Create"
-              onClick={() => navigate('/create')}
+              onClick={() => navigate("/create")}
             />
             <FontAwesomeIcon
               icon={faLock}
               className="icon lock-icon"
               title="TDF"
-              onClick={() => navigate('/tdf')}
+              onClick={() => navigate("/tdf")}
             />
             <FontAwesomeIcon
               icon={faCalendar}
               className="icon events-icon"
               title="Events"
-              onClick={() => navigate('/events')}
+              onClick={() => navigate("/events")}
             />
             <FontAwesomeIcon
               icon={faBell}
@@ -86,24 +78,24 @@ const Navbar: React.FC = () => {
               icon={faEnvelope}
               className="icon dm-icon"
               title="Direct Messages"
-              onClick={() => navigate('/chat')}
+              onClick={() => navigate("/chat")}
             />
             <img
               src={userProfile.picture}
+              className="profile-picture clickable"
               alt="Profile"
-              className="profile-picture"
-              onClick={() => setShowDropdown(!showDropdown)}
+              onClick={() => navigate("/profile")}
+              role="button"
+              tabIndex={0}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" || e.key === " ") {
+                  navigate("/profile");
+                }
+              }}
             />
-            {showDropdown && (
-              <div className="dropdown-menu">
-                <button onClick={() => navigate('/profile')}>View Profile</button>
-                <button onClick={() => navigate('/settings')}>Settings</button>
-                <button onClick={handleLogout}>Logout</button>
-              </div>
-            )}
           </div>
         ) : (
-          <button onClick={() => keycloak.login()}>Sign In</button>
+          <button onClick={login}>Sign In</button>
         )}
       </div>
     </nav>

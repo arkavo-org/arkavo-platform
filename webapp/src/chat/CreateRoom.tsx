@@ -11,6 +11,7 @@ const CreateRoom: React.FC = () => {
     const [error, setError] = useState('');
 
     const handleCreateRoom = async (e: React.FormEvent) => {
+        console.log('Creating room with name:', roomName, 'Public:', isPublic);
         e.preventDefault();
         
         if (!roomName.trim()) {
@@ -18,28 +19,24 @@ const CreateRoom: React.FC = () => {
             return;
         }
 
-        try {
-            const response = await fetch(`${import.meta.env.VITE_USERS_API_URL}/rooms`, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    Authorization: `Bearer ${keycloak.token}`
-                },
-                body: JSON.stringify({
-                    name: roomName,
-                    isPublic: isPublic
-                })
-            });
+        const response = await fetch(`${import.meta.env.VITE_USERS_API_URL}/rooms`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                Authorization: `Bearer ${keycloak.token}`
+            },
+            body: JSON.stringify({
+                name: roomName,
+                isPublic: isPublic
+            })
+        });
 
-            if (response.ok) {
-                const data = await response.json();
-                navigate(`/room/${data.room_id}`);
-            } else {
-                setError('Failed to create room');
-            }
-        } catch (error) {
-            console.error("Error creating room:", error);
-            setError("Failed to create room. Please try again.");
+        console.log('Response status:', response.status);
+        if (response.ok) {
+            const data = await response.json();
+            navigate(`/chat?roomid=${data.room_id}`);
+        } else {
+            setError('Failed to create room');
         }
     };
 

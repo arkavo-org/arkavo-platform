@@ -59,16 +59,16 @@ Base.metadata.create_all(bind=engine)
 
 # Pydantic models
 class UserBase(BaseModel):
-    username: str
+    name: str
+    display_name: str
+    bio: Optional[str]
+    street: Optional[str]
+    city: Optional[str]
+    state: Optional[str]
+    zip_code: Optional[str]
+    country: Optional[str]
     email: str
-    name: Optional[str] = None
-    display_name: Optional[str] = None
-    bio: Optional[str] = None
-    street: Optional[str] = None
-    city: Optional[str] = None
-    state: Optional[str] = None
-    zip_code: Optional[str] = None
-    country: Optional[str] = None
+
 
 class UserCreate(UserBase):
     pass
@@ -99,32 +99,28 @@ class Room(BaseModel):
 
 class ConnectionManager:
     def __init__(self):
-        self.active_connections: dict[str, WebSocket] = {}
+        self.room_connections: Dict[str, Dict[str, WebSocket]] = {}
 
-    async def connect(self, websocket: WebSocket, client_id: str):
-        await websocket.accept()
-        self.active_connections[client_id] = websocket
+    async def connect(self, websocket: WebSocket, client_id: str, room_id: str):
+        if room_id not in self.room_connections:
+            self.room_connections[room_id] = {}
+        self.room_connections[room_id][client_id] = websocket
 
-    def disconnect(self, client_id: str):
-        if client_id in self.active_connections:
-            del self.active_connections[client_id]
+    def disconnect(self, client_id: str, room_id: str):
+        if room_id in self.room_connections:
+            self.room_connections[room_id].pop(client_id, None)
+            if not self.room_connections[room_id]:
+                del self.room_connections[room_id]
 
-    async def send_initial_messages(self, websocket: WebSocket, language: str = "en"):
-        if language not in messages_by_language:
-            language = "en"
-        messages = messages_by_language[language][-20:]  # Get last 20 messages
-        await websocket.send_json({
-            "type": "initial_messages",
-            "messages": [msg.dict() for msg in messages]
-        })
-
-    async def broadcast(self, message: dict):
-        for connection in self.active_connections.values():
-            if connection.client_state == WebSocketState.CONNECTED:
+    async def broadcast(self, room_id: str, message: dict):
+        connections = self.room_connections.get(room_id, {})
+        for websocket in list(connections.values()):
+            if websocket.client_state == WebSocketState.CONNECTED:
                 try:
-                    await connection.send_json(message)
+                    await websocket.send_json(message)
                 except Exception as e:
-                    print(f"Error broadcasting message: {e}")
+                    print(f"Error sending to client in room {room_id}: {e}")
+
 
 manager = ConnectionManager()
 
@@ -310,31 +306,59 @@ async def upload_profile_picture(
 
 @app.put("/profile")
 def update_user(
-    username: str, 
-    user: UserCreate, 
+    user: UserCreate,
     db: Session = Depends(get_db),
     current_user: dict = Depends(get_current_user)
 ):
+    username = current_user.get("preferred_username")
+    if not username:
+        raise HTTPException(status_code=400, detail="Invalid token: missing username")
+
     db_user = db.query(DBUser).filter(DBUser.username == username).first()
     if db_user is None:
         raise HTTPException(status_code=404, detail="User not found")
-    
+
     for key, value in user.dict().items():
         setattr(db_user, key, value)
-    
+
     db.commit()
     db.refresh(db_user)
     return {"message": "Profile updated"}
 
 @app.get("/profile")
-async def get_profile(current_user: dict = Depends(get_current_user)):
-    return {"message": "Profile endpoint", "user": current_user}
+async def get_profile(
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user)
+):
+    username = current_user.get("preferred_username")
+    if not username:
+        raise HTTPException(status_code=400, detail="Invalid token")
+
+    db_user = db.query(DBUser).filter(DBUser.username == username).first()
+    if db_user is None:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    return {
+        "name": db_user.name,
+        "display_name": db_user.display_name,
+        "bio": db_user.bio,
+        "street": db_user.street,
+        "city": db_user.city,
+        "state": db_user.state,
+        "zip_code": db_user.zip_code,
+        "country": db_user.country,
+        "email": db_user.email,
+    }
+
 
 def get_room_key(room_id: str) -> str:
     return f"room:{room_id}"
 
 def get_users_key(room_id: str) -> str:
     return f"room:{room_id}:users"
+
+def get_user_rooms_key(user_id: str) -> str:
+    return f"user:{user_id}:rooms"
 
 def get_pubsub_key(room_id: str) -> str:
     return f"room:{room_id}:pubsub"
@@ -363,32 +387,62 @@ async def create_room(room: Room, current_user: dict = Depends(get_current_user)
     )
     
     # Add creator to room's user set
-    redis_client.sadd(get_users_key(room_id), current_user.get("sub"))
+    user_id = current_user.get("sub")
+    redis_client.sadd(get_users_key(room_id), user_id)
+    
+    # Add room to user's room set
+    redis_client.sadd(get_user_rooms_key(user_id), room_id)
     
     return {"id": room_id, "name": room.name, "isPublic": room.isPublic}
 
+@app.get("/user/rooms")
+async def get_user_rooms(current_user: dict = Depends(get_current_user)):
+    """Get rooms created by or joined by current user"""
+    user_id = current_user.get("sub")
+    room_ids = redis_client.smembers(get_user_rooms_key(user_id))
+    
+    rooms = []
+    for room_id in room_ids:
+        room_data = redis_client.hgetall(get_room_key(room_id.decode()))
+        if room_data:
+            rooms.append({
+                "id": room_id.decode(),
+                "name": room_data.get(b"name", b"").decode(),
+                "is_public": room_data.get(b"is_public", b"0") == b"1"
+            })
+    
+    return {"rooms": rooms}
+
 @app.get("/rooms")
 async def get_rooms(current_user: dict = Depends(get_current_user)):
     """Get list of public rooms + private rooms user is invited to"""
     user_id = current_user.get("sub")
     all_rooms = []
     
-    # Get all room keys
-    room_keys = redis_client.keys("room:*")
-    for key in room_keys:
-        if key.decode().endswith(":users") or key.decode().endswith(":pubsub"):
-            continue
-            
-        room_id = key.decode().split(":")[1]
-        room_data = redis_client.hgetall(key)
-        if room_data:
-            is_public = room_data.get(b"is_public", b"0") == b"1"
-            if is_public or check_room_access(room_id, user_id):
-                all_rooms.append({
-                    "id": room_id,
-                    "name": room_data.get(b"name", b"").decode(),
-                    "is_public": is_public
-                })
+    # Get all room keys safely
+    try:
+        room_keys = redis_client.keys("room:*")
+        for key in room_keys:
+            key_str = key.decode()
+            if key_str.endswith(":users") or key_str.endswith(":pubsub") or key_str.endswith(":messages"):
+                continue
+                
+            room_id = key_str.split(":")[1]
+            try:
+                room_data = redis_client.hgetall(key)
+                if room_data:
+                    is_public = room_data.get(b"is_public", b"0") == b"1"
+                    if is_public or check_room_access(room_id, user_id):
+                        all_rooms.append({
+                            "id": room_id,
+                            "name": room_data.get(b"name", b"").decode(),
+                            "is_public": is_public
+                        })
+            except redis.exceptions.ResponseError:
+                continue  # Skip keys that aren't hashes
+    except Exception as e:
+        print(f"Error getting rooms: {e}")
+        raise HTTPException(status_code=500, detail="Error retrieving rooms")
     
     return {"rooms": all_rooms}
 
@@ -411,12 +465,39 @@ async def post_message(room_id: str, message: Message, current_user: dict = Depe
         raise HTTPException(status_code=403, detail="Access denied")
     
     # Set message metadata
-    message.user = current_user.get("preferred_username", "anonymous")
+    message.sender = current_user.get("preferred_username", "anonymous")
     message.timestamp = datetime.now(timezone.utc)
     
-    # Publish to Redis
+    # Store message in Redis list (persistent storage)
+    message_key = f"room:{room_id}:messages"
+    redis_client.lpush(message_key, message.json())
+    
+    # Publish to Redis pubsub for real-time delivery
     redis_client.publish(get_pubsub_key(room_id), message.json())
+    
+    # Broadcast to all WebSocket connections in this room
+    message_dict = message.dict()
+    message_dict['timestamp'] = message_dict['timestamp'].isoformat()
+    await manager.broadcast(room_id, message_dict)
     return {"status": "message sent"}
+
+@app.get("/rooms/{room_id}/messages")
+async def get_room_messages(
+    room_id: str,
+    current_user: dict = Depends(get_current_user)
+):
+    """Get messages for a room"""
+    if not check_room_access(room_id, current_user.get("sub")):
+        raise HTTPException(status_code=403, detail="Access denied")
+    
+    message_key = f"room:{room_id}:messages"
+    messages = redis_client.lrange(message_key, 0, -1)
+    return {
+        "messages": [
+            Message.parse_raw(msg.decode('utf-8')).dict() 
+            for msg in messages
+        ]
+    }
 
 @app.post("/rooms/{room_id}/invite")
 async def invite_user(room_id: str, user_id: str, current_user: dict = Depends(get_current_user)):
@@ -425,180 +506,42 @@ async def invite_user(room_id: str, user_id: str, current_user: dict = Depends(g
     redis_client.sadd(get_users_key(room_id), user_id)
     return {"status": "user invited"}
 
+
 @app.websocket("/ws/rooms/{room_id}")
 async def websocket_endpoint(websocket: WebSocket, room_id: str):
-    await websocket.accept()
     client_id = None
+
+    # First send accept before any other messages
+    await websocket.accept()
     
-    try:
-        # Authentication
+    # Then wait for auth message
+    data = await websocket.receive_json()
+    if data.get("type") != "auth":
+        await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
+        return
+        
+    payload = await keycloak.verify_token(data["token"])
+    client_id = payload.get("sub")
+    if not check_room_access(room_id, client_id):
+        await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
+        return
+        
+    await manager.connect(websocket, client_id, room_id)
+    await websocket.send_json({
+        "type": "auth-success",
+        "message": "Authentication successful"
+    })
+
+    while True:
         data = await websocket.receive_json()
-        if data.get("type") != "auth":
-            await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
-            return
-            
-        try:
-            payload = await keycloak.verify_token(data["token"])
-            client_id = payload.get("sub")
-            if not check_room_access(room_id, client_id):
-                await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
-                return
-                
-            await manager.connect(websocket, client_id, room_id)
-            await websocket.send_json({"type": "auth-success"})
-        except Exception as e:
-            await websocket.send_json({
-                "type": "auth-failure",
-                "message": str(e)
-            })
-            await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
-            return
-
-        while True:
-            data = await websocket.receive_json()
-            if data.get("type") == "message":
+        if data.get("type") == "message":
+            try:
                 await post_message(room_id, Message(**data), payload)
+            except Exception as e:
+                print(f"Error processing message: {e}")
                 
-    except WebSocketDisconnect:
-        if client_id:
-            manager.disconnect(client_id)
-    except Exception as e:
-        print(f"WebSocket error: {e}")
-        if client_id:
-            manager.disconnect(client_id)
-        await websocket.close(code=status.WS_1011_INTERNAL_ERROR)
-
-from fastapi import FastAPI, Depends, HTTPException, status, WebSocket, WebSocketDisconnect
-import os
-import uuid
-import redis
-from fastapi.security import HTTPBearer
-from pydantic import BaseModel
-from typing import Optional, List
-from datetime import datetime, timezone
-from jose import jwt, JWTError
-import keycloak
-
 # Redis setup
 redis_client = redis.Redis(host='redis_messaging', port=6379, db=0, password=REDIS_PASSWORD)
-
-
-def get_room_key(room_id: str) -> str:
-    return f"room:{room_id}"
-
-def get_users_key(room_id: str) -> str:
-    return f"room:{room_id}:users"
-
-def get_pubsub_key(room_id: str) -> str:
-    return f"room:{room_id}:pubsub"
-
-def check_room_access(room_id: str, user_id: str) -> bool:
-    """Check if user has access to room (public or invited)"""
-    is_public = redis_client.hget(get_room_key(room_id), "is_public")
-    if is_public and is_public.decode() == "1":
-        return True
-    return redis_client.sismember(get_users_key(room_id), user_id)
-
-@app.get("/rooms")
-async def get_rooms(current_user: dict = Depends(get_current_user)):
-    """Get list of public rooms + private rooms user is invited to"""
-    user_id = current_user.get("sub")
-    all_rooms = []
-    
-    # Get all room keys
-    room_keys = redis_client.keys("room:*")
-    for key in room_keys:
-        if key.decode().endswith(":users") or key.decode().endswith(":pubsub"):
-            continue
-            
-        room_id = key.decode().split(":")[1]
-        room_data = redis_client.hgetall(key)
-        if room_data:
-            is_public = room_data.get(b"is_public", b"0") == b"1"
-            if is_public or check_room_access(room_id, user_id):
-                all_rooms.append({
-                    "id": room_id,
-                    "name": room_data.get(b"name", b"").decode(),
-                    "is_public": is_public
-                })
-    
-    return {"rooms": all_rooms}
-
-@app.post("/rooms/{room_id}/join")
-async def join_room(room_id: str, current_user: dict = Depends(get_current_user)):
-    """Validate and add user to room"""
-    user_id = current_user.get("sub")
-    if not check_room_access(room_id, user_id):
-        raise HTTPException(status_code=403, detail="Access denied")
-    
-    # Add user to room's Redis set
-    redis_client.sadd(get_users_key(room_id), user_id)
-    return {"status": "joined"}
-
-@app.post("/rooms/{room_id}/message")
-async def post_message(room_id: str, message: Message, current_user: dict = Depends(get_current_user)):
-    """Post message to room"""
-    user_id = current_user.get("sub")
-    if not check_room_access(room_id, user_id):
-        raise HTTPException(status_code=403, detail="Access denied")
-    
-    # Set message metadata
-    message.user = current_user.get("preferred_username", "anonymous")
-    message.timestamp = datetime.now(timezone.utc)
-    
-    # Publish to Redis
-    redis_client.publish(get_pubsub_key(room_id), message.json())
-    return {"status": "message sent"}
-
-@app.post("/rooms/{room_id}/invite")
-async def invite_user(room_id: str, user_id: str, current_user: dict = Depends(get_current_user)):
-    """Invite user to private room"""
-    # In real implementation, add owner check here
-    redis_client.sadd(get_users_key(room_id), user_id)
-    return {"status": "user invited"}
-
-@app.websocket("/ws/rooms/{room_id}")
-async def websocket_endpoint(websocket: WebSocket, room_id: str):
-    await websocket.accept()
-    client_id = None
-    
-    try:
-        # Authentication
-        data = await websocket.receive_json()
-        if data.get("type") != "auth":
-            await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
-            return
-            
-        try:
-            payload = await keycloak.verify_token(data["token"])
-            client_id = payload.get("sub")
-            if not check_room_access(room_id, client_id):
-                await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
-                return
-                
-            await manager.connect(websocket, client_id, room_id)
-            await websocket.send_json({"type": "auth-success"})
-        except Exception as e:
-            await websocket.send_json({
-                "type": "auth-failure",
-                "message": str(e)
-            })
-            await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
-            return
-
-        while True:
-            data = await websocket.receive_json()
-            if data.get("type") == "message":
-                await post_message(room_id, Message(**data), payload)
-                
-    except WebSocketDisconnect:
-        if client_id:
-            manager.disconnect(client_id)
-    except Exception as e:
-        print(f"WebSocket error: {e}")
-        if client_id:
-            manager.disconnect(client_id)
-        await websocket.close(code=status.WS_1011_INTERNAL_ERROR)
 
 
 if __name__ == "__main__":
