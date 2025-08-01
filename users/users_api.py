@@ -83,10 +83,15 @@ async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(s
     return await keycloak.verify_token(token)
 
 # Message models and storage
+class Attachment(BaseModel):
+    data: str  # base64 encoded
+    mimeType: str
+
 class Message(BaseModel):
     text: str
     sender: str
     timestamp: datetime
+    attachments: Optional[List[Attachment]] = None
     metadata: Optional[dict] = None
 
 messages_all_languages: List[Message] = []
@@ -464,9 +469,11 @@ async def post_message(room_id: str, message: Message, current_user: dict = Depe
     if not check_room_access(room_id, user_id):
         raise HTTPException(status_code=403, detail="Access denied")
     
-    # Set message metadata
-    message.sender = current_user.get("preferred_username", "anonymous")
-    message.timestamp = datetime.now(timezone.utc)
+    # Set message metadata if not provided
+    if not message.sender:
+        message.sender = current_user.get("preferred_username", "anonymous")
+    if not message.timestamp:
+        message.timestamp = datetime.now(timezone.utc)
     
     # Store message in Redis list (persistent storage)
     message_key = f"room:{room_id}:messages"
@@ -474,6 +481,16 @@ async def post_message(room_id: str, message: Message, current_user: dict = Depe
     
     # Publish to Redis pubsub for real-time delivery
     redis_client.publish(get_pubsub_key(room_id), message.json())
+    
+    # Convert attachments to URLs for WebSocket clients
+    if message.attachments:
+        message_dict = message.dict()
+        message_dict['attachments'] = [
+            {'url': f"data:{att.mimeType};base64,{att.data}"}
+            for att in message.attachments
+        ]
+    else:
+        message_dict = message.dict()
     
     # Broadcast to all WebSocket connections in this room
     message_dict = message.dict()

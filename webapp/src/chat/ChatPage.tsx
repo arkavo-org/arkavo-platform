@@ -23,6 +23,11 @@ const ChatPage: React.FC<ChatPageProps> = () => {
   useEffect(() => {
     const fetchUserRooms = async () => {
       try {
+        // Refresh token if needed
+        if (keycloak?.isTokenExpired()) {
+          await keycloak.updateToken(30);
+        }
+
         const response = await fetch(
           `${import.meta.env.VITE_USERS_API_URL}/user/rooms`,
           {

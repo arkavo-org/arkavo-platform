@@ -1,11 +1,11 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useKeycloak } from '@react-keycloak/web';
+import { useAuth } from '../context/AuthContext';
 import '../css/ChatPage.css';
 
 const CreateRoom: React.FC = () => {
     const navigate = useNavigate();
-    const { keycloak } = useKeycloak();
+    const { keycloak } = useAuth();
     const [roomName, setRoomName] = useState('');
     const [isPublic, setIsPublic] = useState(true);
     const [error, setError] = useState('');
@@ -23,7 +23,7 @@ const CreateRoom: React.FC = () => {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
-                Authorization: `Bearer ${keycloak.token}`
+                Authorization: `Bearer ${keycloak?.token}`
             },
             body: JSON.stringify({
                 name: roomName,

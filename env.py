@@ -346,7 +346,6 @@ webapp_build = dict(
         "VITE_KAS_ENDPOINT": VITE_KAS_ENDPOINT,
     },
     command="sh -c 'npm install && npm run build  --verbose'",
-    user=f"{uid}:{gid}",
 )
 
 webapp = dict(

@@ -11,7 +11,6 @@ import Profile from './Profile';
 import Room from './chat/Room';
 import ChatPage from './chat/ChatPage';
 import APIChat from './APIChat';
-import Settings from './Settings';
 import Events from './Events';
 import TDF from './TDF';
 import './css/App.css';
@@ -43,17 +42,6 @@ const AppRoutes: React.FC<AppRoutesProps> = () => {
                 />
                 <Route path="/tdf" element={<TDF />} />
                 <Route path="/apichat" element={<APIChat />} />
-                <Route 
-                  path="/Settings" 
-                  element={
-                    <Settings 
-                      userName="" 
-                      profilePicture="" 
-                      onUpdateName={() => {}} 
-                      onUpdateProfilePicture={() => {}} 
-                    />
-                  } 
-                />
             </Routes>
         </div>
     );
