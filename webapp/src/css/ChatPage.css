@@ -316,11 +316,93 @@ html, body {
 }
 
 .message-attachment {
-    max-width: 100%;
-    max-height: 300px;
-    margin-top: 10px;
+  max-width: 100%;
+  max-height: 300px;
+  border-radius: 4px;
+  margin-top: 8px;
+  cursor: pointer;
+  transition: transform 0.2s;
+}
+
+.message-attachment:hover {
+  transform: scale(1.02);
+}
+
+.image-expanded-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: rgba(0, 0, 0, 0.9);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+
+.image-expanded-container {
+  position: relative;
+  max-width: 90%;
+  max-height: 90%;
+}
+
+.expanded-image {
+  max-width: 100%;
+  max-height: 90vh;
+  object-fit: contain;
+}
+
+.close-expanded-image {
+  position: absolute;
+  top: -30px;
+  right: -30px;
+  color: white;
+  font-size: 30px;
+  cursor: pointer;
+  background: rgba(0,0,0,0.5);
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .send-button {
     padding: 10px 20px;
+}
+
+/* Join room styles */
+.join-room-container {
+    position: sticky;
+    bottom: 0;
+    padding: 16px;
+    background-color: #1a1a1a;
+    border-top: 1px solid #333;
+    display: flex;
+    justify-content: center;
+}
+
+.join-room-button {
+    padding: 12px 24px;
+    background-color: var(--arkavo-dark-orange, #e67e22);
+    color: white;
+    border: none;
+    border-radius: 8px;
+    font-weight: 500;
+    font-size: 16px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    width: 100%;
+    max-width: 300px;
+}
+
+.join-room-button:hover {
+    background-color: var(--arkavo-orange, #f39c12);
+    transform: translateY(-2px);
+}
+
+.join-room-button:active {
+    transform: translateY(0);
 }

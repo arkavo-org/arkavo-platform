@@ -21,6 +21,7 @@
     "react": "^18.3.1",
     "react-bluesky-embed": "^0.5.0",
     "react-dom": "^18.3.1",
+    "react-easy-crop": "^5.5.0",
     "react-router-dom": "^6.28.0",
     "toastr": "^2.1.4",
     "webrtc-adapter": "^9.0.1"
@@ -41,6 +42,7 @@
     "@types/node": "^22.10.0",
     "@types/react": "^18.3.10",
     "@types/react-dom": "^18.3.0",
+    "@types/react-easy-crop": "^1.16.0",
     "@vitejs/plugin-react": "^4.3.4",
     "eslint": "^9.11.1",
     "eslint-plugin-react-hooks": "^5.1.0-rc.0",

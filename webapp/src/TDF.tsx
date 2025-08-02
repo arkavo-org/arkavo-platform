@@ -1,10 +1,10 @@
 import React, { useEffect, useState } from 'react';
-import { useKeycloak } from '@react-keycloak/web';
+import { useAuth } from './context/AuthContext';
 import {AuthProvider, HttpRequest, NanoTDFDatasetClient} from '@opentdf/sdk';
 import {DatasetConfig} from "@opentdf/sdk/nano";
 
 const TDFContent: React.FC = () => {
-  const { keycloak } = useKeycloak();
+  const { keycloak } = useAuth();
   const [count, setCount] = useState(0);
   const [tdfClient, setTdfClient] = useState<NanoTDFDatasetClient | null>(null);
   const [encryptedData, setEncryptedData] = useState<ArrayBuffer | null>(null);
@@ -16,7 +16,7 @@ const TDFContent: React.FC = () => {
 
   useEffect(() => {
     (async () => {
-      if (!keycloak.authenticated) return;
+      if (!keycloak?.authenticated) return;
 
       try {
         setStatus({ type: 'info', message: 'Initializing TDF client...' });
@@ -27,7 +27,7 @@ const TDFContent: React.FC = () => {
             return
           },
           withCreds(httpReq: HttpRequest): Promise<HttpRequest> {
-            httpReq.headers.Authorization = `Bearer ${keycloak.token}`;
+            httpReq.headers.Authorization = `Bearer ${keycloak?.token}`;
             return Promise.resolve(httpReq);
           }
         }
@@ -48,7 +48,7 @@ const TDFContent: React.FC = () => {
         });
       }
     })();
-  }, [keycloak.authenticated, keycloak.token]);
+  }, [keycloak?.authenticated, keycloak?.token]);
 
   const handleEncrypt = async () => {
     if (!tdfClient) return;
@@ -96,10 +96,10 @@ const TDFContent: React.FC = () => {
       .join(' ');
   };
 
-  if (!keycloak.authenticated) {
+  if (!keycloak?.authenticated) {
     return (
       <div>
-        <button onClick={() => keycloak.login()}>Log in</button>
+        <button onClick={() => keycloak?.login()}>Log in</button>
       </div>
     );
   }
@@ -107,8 +107,8 @@ const TDFContent: React.FC = () => {
   return (
     <div className="container">
       <div className="user-info">
-        <p>Welcome {keycloak.tokenParsed?.preferred_username}</p>
-        <button onClick={() => keycloak.logout()}>Log out</button>
+        <p>Welcome {keycloak?.tokenParsed?.preferred_username}</p>
+        <button onClick={() => keycloak?.logout()}>Log out</button>
       </div>
       <h1>Secure Vite + React App + OpenTDF + Keycloak</h1>
       {status.message && (

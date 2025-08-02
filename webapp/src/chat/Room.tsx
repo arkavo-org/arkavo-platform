@@ -1,6 +1,8 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useAuth } from '../context/AuthContext';
 import '../css/ChatPage.css';
+import Profile from '../Profile';
+import UserProfile from '../UserProfile';
 
 interface Attachment {
   data: string; // base64 encoded
@@ -19,13 +21,41 @@ interface RoomProps {
   roomId: string;
 }
 
-const Room: React.FC<RoomProps> = ({ roomId }) => {
+import { useNavigate, useParams } from 'react-router-dom';
+
+const Room: React.FC<RoomProps> = ({ roomId: initialRoomId }) => {
   const { keycloak } = useAuth();
+  const navigate = useNavigate();
+  const params = useParams();
+  const [roomId, setRoomId] = useState<string>(() => {
+    // Try to get from localStorage first, fallback to prop
+    const savedRoomId = localStorage.getItem('currentRoomId');
+    const currentRoomId = savedRoomId || initialRoomId;
+    
+    // Update URL if needed (initial load)
+    if (params.roomId !== currentRoomId) {
+      navigate(`/chat/${currentRoomId}`, { replace: true });
+    }
+    return currentRoomId;
+  });
+
+  // Update URL whenever roomId changes (including after joining)
+  useEffect(() => {
+    if (params.roomId !== roomId) {
+      navigate(`/chat/${roomId}`, { replace: true });
+      localStorage.setItem('currentRoomId', roomId);
+    }
+  }, [roomId, params.roomId, navigate]);
+
+  // Persist roomId to localStorage whenever it changes
+  useEffect(() => {
+    localStorage.setItem('currentRoomId', roomId);
+  }, [roomId]);
   const [messages, setMessages] = useState<Message[]>([]);
   const [profiles, setProfiles] = useState<{[key: string]: {display_name: string, picture: string}}>({});
 
-  const fetchProfile = useCallback(async (username: string) => {
-    if (!keycloak || !username || profiles[username]) return;
+  const fetchProfile = useCallback(async (userId: string) => {
+    if (!keycloak || !userId || profiles[userId]) return;
 
     try {
       if (keycloak.isTokenExpired()) {
@@ -33,7 +63,7 @@ const Room: React.FC<RoomProps> = ({ roomId }) => {
       }
 
       const response = await fetch(
-        `${import.meta.env.VITE_USERS_API_URL}/profile?username=${username}`,
+        `${import.meta.env.VITE_USERS_API_URL}/profile/${userId}`,
         {
           headers: {
             Authorization: `Bearer ${keycloak.token}`
@@ -45,8 +75,8 @@ const Room: React.FC<RoomProps> = ({ roomId }) => {
         const data = await response.json();
         setProfiles(prev => ({
           ...prev,
-          [username]: {
-            display_name: data.display_name || username,
+          [userId]: {
+            display_name: data.display_name || userId,
             picture: data.picture || ''
           }
         }));
@@ -57,13 +87,19 @@ const Room: React.FC<RoomProps> = ({ roomId }) => {
   }, [keycloak, profiles]);
   const [newMessage, setNewMessage] = useState('');
   const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
+  const [expandedImage, setExpandedImage] = useState<string | null>(null);
+  const [showProfileModal, setShowProfileModal] = useState(false);
+  const [showUserProfileModal, setShowUserProfileModal] = useState(false);
+  const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [ws, setWs] = useState<WebSocket | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
-  // Fetch messages only when roomId changes
+  // Fetch messages when roomId changes or keycloak authentication status changes
   useEffect(() => {
     const fetchMessages = async () => {
+      if (!keycloak?.authenticated) return;
+      
       const url = `${import.meta.env.VITE_USERS_API_URL}/rooms/${roomId}/messages`;
       console.log(`Fetching messages from: ${url}`);
       try {
@@ -72,9 +108,15 @@ const Room: React.FC<RoomProps> = ({ roomId }) => {
           await keycloak.updateToken(30);
         }
         
+        const token = keycloak?.token;
+        if (!token) {
+          console.error('No token available');
+          return;
+        }
+        
         const response = await fetch(url, {
           headers: {
-            'Authorization': `Bearer ${keycloak?.token}`
+            'Authorization': `Bearer ${token}`
           }
         });
         if (response.ok) {
@@ -85,7 +127,10 @@ const Room: React.FC<RoomProps> = ({ roomId }) => {
           const uniqueSenders = [...new Set(data.messages.map((m: Message) => m.sender))].filter(
             (sender): sender is string => typeof sender === 'string'
           );
-          uniqueSenders.forEach(sender => fetchProfile(sender));
+          uniqueSenders.forEach(sender => {
+            // Always use the message sender's ID
+            fetchProfile(sender);
+          });
         } else {
           console.error('Failed to fetch messages:', {
             status: response.status,
@@ -102,20 +147,38 @@ const Room: React.FC<RoomProps> = ({ roomId }) => {
     };
 
     fetchMessages();
-  }, [roomId]);
+  }, [roomId, keycloak?.authenticated]);
 
-  // Handle WebSocket connection only when roomId changes
+  // Handle WebSocket connection when roomId changes or keycloak authentication status changes
   useEffect(() => {
+    if (!keycloak?.authenticated) return;
+
     const wss_url = `${import.meta.env.VITE_USERS_WSS_URL}/ws/rooms/${roomId}`;
     console.log(`Attempting WebSocket connection to: ${wss_url}`);
     const socket = new WebSocket(wss_url);
     
-    const handleAuth = () => {
-      console.log(`WebSocket connection established to ${wss_url}`);
-      socket.send(JSON.stringify({
-        type: 'auth',
-        token: keycloak?.token
-      }));
+    const handleAuth = async () => {
+      try {
+        if (keycloak?.isTokenExpired()) {
+          await keycloak.updateToken(30);
+        }
+        
+        const token = keycloak?.token;
+        if (!token) {
+          console.error('No token available for WebSocket auth');
+          socket.close();
+          return;
+        }
+
+        console.log(`WebSocket connection established to ${wss_url}`);
+        socket.send(JSON.stringify({
+          type: 'auth',
+          token: token
+        }));
+      } catch (error) {
+        console.error('Error during WebSocket auth:', error);
+        socket.close();
+      }
     };
 
     socket.onopen = handleAuth;
@@ -143,7 +206,10 @@ const Room: React.FC<RoomProps> = ({ roomId }) => {
           };
           setMessages(prev => [...prev, processedMessage]);
           if (typeof message.sender === 'string') {
-            fetchProfile(message.sender);
+            // Always use the message sender's ID
+            if (!profiles[message.sender]) {
+              fetchProfile(message.sender);
+            }
           }
         }
       } catch (error) {
@@ -156,7 +222,7 @@ const Room: React.FC<RoomProps> = ({ roomId }) => {
     return () => {
       socket.close();
     };
-  }, [roomId]);
+  }, [roomId, keycloak?.authenticated]);
 
   // Update WebSocket auth when token changes
   useEffect(() => {
@@ -228,7 +294,7 @@ const Room: React.FC<RoomProps> = ({ roomId }) => {
 
       const message = {
         text: newMessage,
-        sender: keycloak?.tokenParsed?.preferred_username || "user",
+        sender: keycloak?.tokenParsed?.sub || "user",
         timestamp: new Date().toISOString(),
         attachments: attachments.length > 0 ? attachments.map(att => ({
           data: att.data,
@@ -296,24 +362,140 @@ const Room: React.FC<RoomProps> = ({ roomId }) => {
     }
   };
 
+  const [isMember, setIsMember] = useState(false);
+
+  useEffect(() => {
+    const checkRoomMembership = async () => {
+      if (!keycloak?.tokenParsed?.sub || !keycloak?.authenticated) return;
+
+      try {
+        if (keycloak.isTokenExpired()) {
+          await keycloak.updateToken(30);
+        }
+
+        const response = await fetch(
+          `${import.meta.env.VITE_USERS_API_URL}/user/rooms`,
+          {
+            headers: {
+              Authorization: `Bearer ${keycloak.token}`
+            }
+          }
+        );
+
+        if (response.ok) {
+          const data = await response.json();
+          setIsMember(data.rooms.some((r: {id: string}) => r.id === roomId));
+        }
+      } catch (error) {
+        console.error('Error checking room membership:', error);
+      }
+    };
+
+    checkRoomMembership();
+  }, [roomId, keycloak, keycloak?.authenticated]);
+
+  const handleJoinRoom = async () => {
+    try {
+      if (keycloak?.isTokenExpired()) {
+        await keycloak.updateToken(30);
+      }
+
+      const response = await fetch(
+        `${import.meta.env.VITE_USERS_API_URL}/rooms/${roomId}/join`,
+        {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${keycloak?.token}`
+          }
+        }
+      );
+
+      if (response.ok) {
+        setIsMember(true);
+        // Update URL to reflect the joined room
+        navigate(`/chat/${roomId}`, { replace: true });
+        // Refresh the room list by calling the original fetch messages function
+        const fetchMessages = async () => {
+          const url = `${import.meta.env.VITE_USERS_API_URL}/rooms/${roomId}/messages`;
+          const response = await fetch(url, {
+            headers: {
+              'Authorization': `Bearer ${keycloak?.token}`
+            }
+          });
+          if (response.ok) {
+            const data = await response.json();
+            setMessages(data.messages);
+          }
+        };
+        fetchMessages();
+      }
+    } catch (error) {
+      console.error('Error joining room:', error);
+    }
+  };
+
   return (
     <div className="chat-area">
+      {expandedImage && (
+        <div className="image-expanded-overlay" onClick={() => setExpandedImage(null)}>
+          <div className="image-expanded-container">
+            <span 
+              className="close-expanded-image"
+              onClick={(e) => {
+                e.stopPropagation();
+                setExpandedImage(null);
+              }}
+            >
+              ×
+            </span>
+            <img 
+              src={expandedImage} 
+              className="expanded-image"
+              onClick={(e) => e.stopPropagation()}
+            />
+          </div>
+        </div>
+      )}
       
       <div className="message-area">
         {messages.sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime()).map((msg, index) => (
           <div key={index} className="message-item">
             {profiles[msg.sender]?.picture ? (
               <img 
-                src={profiles[msg.sender].picture} 
+                src={profiles[msg.sender].picture.startsWith('data:') ? 
+                  profiles[msg.sender].picture : 
+                  `data:image/jpeg;base64,${profiles[msg.sender].picture}`} 
                 className="room-avatar" 
                 alt={profiles[msg.sender].display_name}
+                onClick={() => {
+                  if (msg.sender === keycloak?.tokenParsed?.sub) {
+                    setShowProfileModal(true);
+                  } else {
+                    setSelectedUserId(msg.sender);
+                    setShowUserProfileModal(true);
+                  }
+                }}
+                style={{cursor: 'pointer'}}
               />
             ) : (
-              <div className="room-avatar">{(msg.sender || '?').charAt(0).toUpperCase()}</div>
+              <div 
+                className="room-avatar"
+                onClick={() => {
+                  if (msg.sender === keycloak?.tokenParsed?.sub) {
+                    setShowProfileModal(true);
+                  } else {
+                    setSelectedUserId(msg.sender);
+                    setShowUserProfileModal(true);
+                  }
+                }}
+                style={{cursor: 'pointer'}}
+              >
+                {(msg.sender || '?').charAt(0).toUpperCase()}
+              </div>
             )}
             <div>
               <div className="message-user">
-                {profiles[msg.sender]?.display_name || msg.sender || 'Unknown'}
+                {profiles[msg.sender]?.display_name || 'Unknown'}
               </div>
               <div className="message-text">{msg.text}</div>
         {msg.attachments?.map((attachment, i) => {
@@ -327,6 +509,7 @@ const Room: React.FC<RoomProps> = ({ roomId }) => {
                   alt="Attachment"
                   className="message-attachment"
                   loading="lazy"
+                  onClick={() => setExpandedImage(dataUrl)}
                 />
               ) : attachment.mimeType.startsWith('video/') ? (
                 <video
@@ -349,68 +532,75 @@ const Room: React.FC<RoomProps> = ({ roomId }) => {
         <div ref={messagesEndRef} />
       </div>
 
-      <div className="message-input">
-        <div 
-          className="message-input-container"
-          onDragOver={handleDragOver}
-          onDrop={handleDrop}
-        >
-          <textarea
-            value={newMessage}
-            onChange={(e) => setNewMessage(e.target.value)}
-            onKeyDown={handleKeyPress}
-            placeholder="Type a message or drag files here..."
-            className="message-textarea"
+      {isMember ? (
+        <div className="message-input">
+          <div 
+            className="message-input-container"
+            onDragOver={handleDragOver}
+            onDrop={handleDrop}
+          >
+            <textarea
+              value={newMessage}
+              onChange={(e) => setNewMessage(e.target.value)}
+              onKeyDown={handleKeyPress}
+              placeholder="Type a message or drag files here..."
+              className="message-textarea"
+            />
+            {selectedFiles.length === 0 && (
+              <div className="drop-zone-overlay">
+                Drop files here
+              </div>
+            )}
+          </div>
+          <input 
+            ref={fileInputRef}
+            type="file" 
+            accept="image/*,video/*" 
+            onChange={handleFileChange}
+            className="hidden-file-input"
+            multiple
           />
-          {selectedFiles.length === 0 && (
-            <div className="drop-zone-overlay">
-              Drop files here
+          <button 
+            onClick={() => fileInputRef.current?.click()}
+            className="add-files-button"
+          >
+            Add Files
+          </button>
+          {selectedFiles.length > 0 && (
+            <div className="file-previews-container">
+              {selectedFiles.map((file, index) => (
+                <div key={index} className="file-preview">
+                  <span 
+                    onClick={() => removeFile(index)}
+                    className="remove-file-button"
+                  >
+                    ×
+                  </span>
+                  {file.type.startsWith('image/') ? (
+                    <img 
+                      src={URL.createObjectURL(file)} 
+                      alt="Preview" 
+                      className="image-preview"
+                    />
+                  ) : (
+                    <div className="video-preview-placeholder">
+                      <span>🎥</span>
+                    </div>
+                  )}
+                </div>
+              ))}
             </div>
           )}
+          <button onClick={handleSendMessage} className="send-button">Send</button>
         </div>
-        <input 
-          ref={fileInputRef}
-          type="file" 
-          accept="image/*,video/*" 
-          onChange={handleFileChange}
-          className="hidden-file-input"
-          multiple
-        />
-        <button 
-          onClick={() => fileInputRef.current?.click()}
-          className="add-files-button"
-        >
-          Add Files
-        </button>
-        {selectedFiles.length > 0 && (
-          <div className="file-previews-container">
-            {selectedFiles.map((file, index) => (
-              <div key={index} className="file-preview">
-                <span 
-                  onClick={() => removeFile(index)}
-                  className="remove-file-button"
-                >
-                  ×
-                </span>
-                {file.type.startsWith('image/') ? (
-                  <img 
-                    src={URL.createObjectURL(file)} 
-                    alt="Preview" 
-                    className="image-preview"
-                  />
-                ) : (
-                  <div className="video-preview-placeholder">
-                    <span>🎥</span>
-                  </div>
-                )}
-              </div>
-            ))}
-          </div>
-        )}
-        <button onClick={handleSendMessage} className="send-button">Send</button>
-      </div>
+      ) : (
+        <div className="join-room-container">
+          <button onClick={handleJoinRoom} className="join-room-button">
+            Join Room
+          </button>
+        </div>
+      )}
     </div>
-  );
-};
+)};
 
 export default Room;

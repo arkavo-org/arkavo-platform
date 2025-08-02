@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useParams } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
+import "../css/global.css";
 import "../css/ChatPage.css";
 import Room from "./Room";
 import ExploreRooms from "./ExploreRooms";
@@ -16,9 +17,17 @@ interface ChatPageProps {}
 const ChatPage: React.FC<ChatPageProps> = () => {
   const navigate = useNavigate();
   const { isAuthenticated, keycloak } = useAuth();
-  const [activeRoom, setActiveRoom] = useState<string | null>(null);
+  const { roomId: urlRoomId } = useParams();
+  const [activeRoom, setActiveRoom] = useState<string | null>(urlRoomId || null);
   const [showExplore, setShowExplore] = useState(false);
   const [userRooms, setUserRooms] = useState<Room[]>([]);
+
+  useEffect(() => {
+    // If URL has a roomId but our state doesn't, update it
+    if (urlRoomId && !activeRoom) {
+      setActiveRoom(urlRoomId);
+    }
+  }, [urlRoomId]);
 
   useEffect(() => {
     const fetchUserRooms = async () => {

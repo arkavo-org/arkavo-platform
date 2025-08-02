@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import {
@@ -7,18 +7,20 @@ import {
   faCalendar,
   faBullhorn,
   faPlusCircle,
+  faLock,
 } from "@fortawesome/free-solid-svg-icons";
 import "./css/Navbar.css";
 import { useAuth } from "./context/AuthContext";
-import { faLock } from "@fortawesome/free-solid-svg-icons";
 
-const Navbar: React.FC = () => {
+interface NavbarProps {
+  onProfileClick?: () => void;
+}
+
+const Navbar: React.FC<NavbarProps> = ({ onProfileClick }) => {
   const { isAuthenticated, userProfile, login, logout } = useAuth();
   const navigate = useNavigate();
   const [showDropdown, setShowDropdown] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
-
-  // Removed useEffect since userProfile is now managed by AuthProvider
 
   const handleLogout = () => {
     logout();
@@ -81,21 +83,23 @@ const Navbar: React.FC = () => {
               onClick={() => navigate("/chat")}
             />
             <img
-              src={userProfile.picture}
+              src={userProfile.picture || '/assets/default-profile.png'}
               className="profile-picture clickable"
               alt="Profile"
-              onClick={() => navigate("/profile")}
+              onClick={onProfileClick}
               role="button"
               tabIndex={0}
               onKeyDown={(e) => {
                 if (e.key === "Enter" || e.key === " ") {
-                  navigate("/profile");
+                  onProfileClick?.();
                 }
               }}
             />
           </div>
         ) : (
-          <button onClick={login}>Sign In</button>
+          <button onClick={login} className="sign-in-button">
+            Sign In
+          </button>
         )}
       </div>
     </nav>

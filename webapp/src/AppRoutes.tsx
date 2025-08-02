@@ -1,5 +1,4 @@
-// src/AppRoutes.tsx
-import React from 'react';
+import React, { useState } from 'react';
 import { Routes, Route } from 'react-router-dom';
 import Navbar from './Navbar';
 import Feed from './Feed';
@@ -15,25 +14,30 @@ import Events from './Events';
 import TDF from './TDF';
 import './css/App.css';
 import Bluesky from './Bluesky';
- 
+
 interface AppRoutesProps {}
 
 const AppRoutes: React.FC<AppRoutesProps> = () => {
+    const [showProfileModal, setShowProfileModal] = useState(false);
+
     return (
         <div id="fullpage">
-            <Navbar />
+            <Navbar onProfileClick={() => setShowProfileModal(true)} />
             <Routes>
-                <Route path="/" element={<ChatPage />} /> {/* Home route for the feed */}
-                <Route path="/privacy" element={<Privacy />} /> {/* Privacy page route */}
-                <Route path="/profile" element={<Profile />} />
+                <Route path="/" element={<ChatPage />} />
+                <Route path="/privacy" element={<Privacy />} />
                 <Route path="/chat" element={<ChatPage />} />
                 <Route path="/create-room" element={<CreateRoom />} />
                 <Route path="/events" element={<Events />} />
                 <Route path="/feed" element={<Feed />} />
-                <Route path="/navbar" element={<Navbar />} />
+                <Route path="/navbar" element={<Navbar onProfileClick={() => setShowProfileModal(true)} />} />
+                <Route 
+                  path="/chat/:roomId" 
+                  element={<ChatPage roomId="" />}
+                />
                 <Route 
                   path="/room/:roomId" 
-                  element={<Room roomId="" />} // roomId will be provided by router params
+                  element={<Room roomId="" />}
                 />
                 <Route path="/video" element={<VideoFeed />} />
                 <Route 
@@ -43,6 +47,14 @@ const AppRoutes: React.FC<AppRoutesProps> = () => {
                 <Route path="/tdf" element={<TDF />} />
                 <Route path="/apichat" element={<APIChat />} />
             </Routes>
+
+            {/* Profile Modal */}
+            {showProfileModal && (
+                <Profile 
+                    isModal={true} 
+                    onClose={() => setShowProfileModal(false)} 
+                />
+            )}
         </div>
     );
 };

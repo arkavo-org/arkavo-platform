@@ -1,11 +1,9 @@
 from fastapi import FastAPI, Depends, HTTPException, status, Request, WebSocket, WebSocketDisconnect, UploadFile, File
 import os
 import uuid
-import shutil
 import aiohttp
 import asyncio
 import io
-import concurrent.futures
 import keycloak
 from PIL import Image
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
@@ -13,26 +11,16 @@ from fastapi.websockets import WebSocketState
 from pydantic import BaseModel
 from typing import Optional, List, Dict
 from datetime import datetime, timezone
-import datetime as dt
-from jose import jwt, JWTError, jwk
 import requests
+import base64
 import redis
 import keycloak
-
-from sqlalchemy import create_engine, Column, String, Text, text
-from sqlalchemy import inspect
-from sqlalchemy.orm import declarative_base, sessionmaker, Session
 
 # Add parent directory to sys.path
 import sys
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
-from env import REDIS_PASSWORD, POSTGRES_PASSWORD
+from env import REDIS_PASSWORD
 
-# PostgreSQL setup
-SQLALCHEMY_DATABASE_URL = f"postgresql://postgres:{POSTGRES_PASSWORD}@usersdb/postgres"
-engine = create_engine(SQLALCHEMY_DATABASE_URL)
-SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
-Base = declarative_base()
 current_dir = os.path.dirname(os.path.abspath(__file__))
 
 # FastAPI app setup
@@ -40,25 +28,12 @@ app = FastAPI()
 # Security scheme for JWT tokens
 security = HTTPBearer()
 
-# Database models
-class DBUser(Base):
-    __tablename__ = "users"
-    
-    username = Column(String, primary_key=True, index=True)
-    email = Column(String, unique=True, index=True)
-    name = Column(String)
-    display_name = Column(String)
-    bio = Column(Text)
-    street = Column(String)
-    city = Column(String)
-    state = Column(String)
-    zip_code = Column(String)
-    country = Column(String)
-
-Base.metadata.create_all(bind=engine)
+# Redis setup
+redis_client = redis.Redis(host='redis_messaging', port=6379, db=0, password=REDIS_PASSWORD)
 
 # Pydantic models
 class UserBase(BaseModel):
+    uuid: str
     name: str
     display_name: str
     bio: Optional[str]
@@ -67,7 +42,6 @@ class UserBase(BaseModel):
     state: Optional[str]
     zip_code: Optional[str]
     country: Optional[str]
-    email: str
 
 
 class UserCreate(UserBase):
@@ -166,15 +140,6 @@ async def translate_message_async(
 # Fetch LibreTranslate languages on startup
 @app.on_event("startup")
 async def startup_event():
-    # Verify and update database schema
-    with SessionLocal() as db:
-        inspector = inspect(engine)
-        columns = [col['name'] for col in inspector.get_columns('users')]
-        if 'display_name' not in columns:
-            db.execute(text("ALTER TABLE users ADD COLUMN display_name VARCHAR"))
-            db.commit()
-            print("Added display_name column to users table")
-
     # Initialize message languages
     try:
         response = requests.get("http://libretranslate:5000/languages")
@@ -186,59 +151,55 @@ async def startup_event():
     except Exception as e:
         print(f"Failed to fetch LibreTranslate languages: {e}")
 
-# Dependency
-def get_db():
-    db = SessionLocal()
-    try:
-        yield db
-    finally:
-        db.close()
+def get_user_key(uuid: str) -> str:
+    return f"user:{uuid}"
 
 @app.post("/users/", response_model=User)
 def create_user(
-    user: UserCreate, 
-    db: Session = Depends(get_db),
+    user: UserCreate,
     current_user: dict = Depends(get_current_user)
 ):
-    db_user = DBUser(**user.dict())
-    db.add(db_user)
-    db.commit()
-    db.refresh(db_user)
-    return db_user
+    uuid = current_user.get("sub")
+    if not uuid:
+        raise HTTPException(status_code=400, detail="Invalid token: missing user UUID")
+    
+    # Ensure UUID is set in user data
+    user.uuid = uuid
+    user_key = get_user_key(uuid)
+    redis_client.hset(user_key, mapping=user.dict())
+    return user
 
-@app.get("/users/{username}", response_model=User)
+@app.get("/users/{uuid}", response_model=User)
 def read_user(
-    username: str, 
-    db: Session = Depends(get_db),
+    uuid: str,
     current_user: dict = Depends(get_current_user)
 ):
-    db_user = db.query(DBUser).filter(DBUser.username == username).first()
-    if db_user is None:
+    user_key = get_user_key(uuid)
+    user_data = redis_client.hgetall(user_key)
+    if not user_data:
         raise HTTPException(status_code=404, detail="User not found")
-    return db_user
-
-# Ensure images directory exists
-os.makedirs("images", exist_ok=True)
+    
+    # Convert bytes to strings
+    user_dict = {k.decode(): v.decode() for k, v in user_data.items()}
+    return User(**user_dict)
 
 @app.post("/users/picture")
 async def upload_profile_picture(
     picture: UploadFile = File(..., description="The image file to upload"),
-    db: Session = Depends(get_db),
     current_user: dict = Depends(get_current_user)
 ):
     """Upload a profile picture for the specified user.
     
     Accepts multipart/form-data with a single file field named 'picture'.
     The file must be an image (JPEG, PNG, GIF, or WebP).
+    Returns the image as base64 encoded string.
     """
-    output_dir = os.path.join(current_dir, "worldchat", "images")
-    print("Received file upload:", picture.filename, picture.content_type, picture.size)
-    # Get username from auth token
-    username = current_user.get("preferred_username")
-    if not username:
+    # Get user UUID from auth token
+    uuid = current_user.get("sub")
+    if not uuid:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN, 
-            detail="No username found in auth token"
+            detail="No user ID found in auth token"
         )
 
     # Validate file is an image
@@ -248,34 +209,12 @@ async def upload_profile_picture(
             detail=f"File must be an image. Received content type: {picture.content_type}"
         )
         
-    # Check for common image extensions
-    allowed_extensions = ['.jpg', '.jpeg', '.png', '.gif', '.webp']
-    file_ext = os.path.splitext(picture.filename.lower())[1]
-    if file_ext not in allowed_extensions:
-        raise HTTPException(
-            status_code=400,
-            detail=f"Unsupported file type. Allowed: {', '.join(allowed_extensions)}"
-        )
-    # Ensure images directory exists and is writable
-    os.makedirs(output_dir, exist_ok=True)
-    if not os.access(output_dir, os.W_OK):
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Images directory is not writable"
-        )
-
-    # Generate random filename
-    ext = os.path.splitext(picture.filename)[1]
-    random_filename = f"{uuid.uuid4().hex}{ext}"
-    file_path = os.path.join(current_dir, "worldchat", "images", random_filename)
-
-    # Process and save image
     try:
-        # Read image with Pillow
+        # Read and process image
         image_bytes = await picture.read()
         img = Image.open(io.BytesIO(image_bytes))
         
-        # Convert to RGB if needed (for PNG with transparency)
+        # Convert to RGB if needed
         if img.mode in ('RGBA', 'P'):
             img = img.convert('RGB')
             
@@ -287,72 +226,101 @@ async def upload_profile_picture(
             (512 - img.height) // 2
         ))
         
-        # Save as WebP
-        output = io.BytesIO()
-        new_img.save(output, format='WEBP', quality=90)
-        output.seek(0)
+        # Convert to base64
+        buffered = io.BytesIO()
+        new_img.save(buffered, format="JPEG")
+        img_str = base64.b64encode(buffered.getvalue()).decode("utf-8")
         
-        # Save file
-        with open(file_path, "wb") as buffer:
-            buffer.write(output.read())
-            
+        # Update user record in Redis
+        user_key = get_user_key(uuid)
+        redis_client.hset(user_key, "picture", img_str)
+        
+        return {"picture": img_str}
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error processing image: {str(e)}")
-    
-    # Update user record with new picture URL
-    db_user = db.query(DBUser).filter(DBUser.username == username).first()
-    returl = os.path.join("images", random_filename)
-    if db_user:
-        db_user.picture = os.path.join(current_dir, returl) 
-        db.commit()
-        db.refresh(db_user)
-    
-    return {"pictureUrl": "/" + returl}
 
 @app.put("/profile")
-def update_user(
-    user: UserCreate,
-    db: Session = Depends(get_db),
+async def update_user(
+    user_data: dict,
     current_user: dict = Depends(get_current_user)
 ):
-    username = current_user.get("preferred_username")
-    if not username:
-        raise HTTPException(status_code=400, detail="Invalid token: missing username")
+    uuid = current_user.get("sub")
+    if not uuid:
+        raise HTTPException(status_code=400, detail="Invalid token: missing user ID")
 
-    db_user = db.query(DBUser).filter(DBUser.username == username).first()
-    if db_user is None:
-        raise HTTPException(status_code=404, detail="User not found")
-
-    for key, value in user.dict().items():
-        setattr(db_user, key, value)
-
-    db.commit()
-    db.refresh(db_user)
-    return {"message": "Profile updated"}
+    user_key = get_user_key(uuid)
+    
+    # Ensure UUID is included in the stored data
+    user_data['uuid'] = uuid
+    
+    # Filter out None values
+    filtered_data = {k: v for k, v in user_data.items() if v is not None}
+    
+    # Update or create the profile
+    redis_client.hset(user_key, mapping=filtered_data)
+    
+    return {"message": "Profile updated successfully"}
 
 @app.get("/profile")
-async def get_profile(
-    db: Session = Depends(get_db),
+async def get_current_user_profile(
     current_user: dict = Depends(get_current_user)
 ):
-    username = current_user.get("preferred_username")
-    if not username:
-        raise HTTPException(status_code=400, detail="Invalid token")
+    """Get the profile of the currently authenticated user"""
+    user_uuid = current_user.get("sub")
+    if not user_uuid:
+        raise HTTPException(status_code=400, detail="User UUID required")
 
-    db_user = db.query(DBUser).filter(DBUser.username == username).first()
-    if db_user is None:
+    user_key = get_user_key(user_uuid)
+    user_data = redis_client.hgetall(user_key)
+    if not user_data:
         raise HTTPException(status_code=404, detail="User not found")
 
+    # Convert bytes to strings
+    profile_data = {k.decode(): v.decode() for k, v in user_data.items()}
+
+    # Get default image if no picture set
+    default_image_path = os.path.join(current_dir, "..", "webapp", "public", "assets", "dummy-image.jpg")
+    picture = profile_data.get("picture")
+    if not picture and os.path.exists(default_image_path):
+        with open(default_image_path, "rb") as image_file:
+            picture = base64.b64encode(image_file.read()).decode("utf-8")
+        profile_data["picture"] = picture
+
+    # Return all profile fields for own profile
+    return profile_data
+
+@app.get("/profile/{user_uuid}")
+async def get_profile_by_uuid(
+    user_uuid: str,
+    current_user: dict = Depends(get_current_user)
+):
+    """Get profile information for any user by their UUID"""
+    if not user_uuid:
+        raise HTTPException(status_code=400, detail="User UUID required")
+
+    user_key = get_user_key(user_uuid)
+    user_data = redis_client.hgetall(user_key)
+    if not user_data:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    # Convert bytes to strings
+    profile_data = {k.decode(): v.decode() for k, v in user_data.items()}
+
+    # Get default image if no picture set
+    default_image_path = os.path.join(current_dir, "..", "webapp", "public", "assets", "dummy-image.jpg")
+    picture = profile_data.get("picture")
+    if not picture and os.path.exists(default_image_path):
+        with open(default_image_path, "rb") as image_file:
+            picture = base64.b64encode(image_file.read()).decode("utf-8")
+        profile_data["picture"] = picture
+
+    # Return only public profile fields for other users
     return {
-        "name": db_user.name,
-        "display_name": db_user.display_name,
-        "bio": db_user.bio,
-        "street": db_user.street,
-        "city": db_user.city,
-        "state": db_user.state,
-        "zip_code": db_user.zip_code,
-        "country": db_user.country,
-        "email": db_user.email,
+        "uuid": user_uuid,
+        "name": profile_data.get("name"),
+        "display_name": profile_data.get("display_name"),
+        "bio": profile_data.get("bio"),
+        "picture": profile_data.get("picture")
     }
 
 
@@ -460,6 +428,8 @@ async def join_room(room_id: str, current_user: dict = Depends(get_current_user)
     
     # Add user to room's Redis set
     redis_client.sadd(get_users_key(room_id), user_id)
+    # Add room to user's rooms set (like we do in create_room)
+    redis_client.sadd(get_user_rooms_key(user_id), room_id)
     return {"status": "joined"}
 
 @app.post("/rooms/{room_id}/message")
