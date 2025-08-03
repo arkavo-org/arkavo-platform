@@ -330,6 +330,9 @@ def get_room_key(room_id: str) -> str:
 def get_users_key(room_id: str) -> str:
     return f"room:{room_id}:users"
 
+def get_admins_key(room_id: str) -> str:
+    return f"room:{room_id}:admins"
+
 def get_user_rooms_key(user_id: str) -> str:
     return f"user:{user_id}:rooms"
 
@@ -342,31 +345,6 @@ def check_room_access(room_id: str, user_id: str) -> bool:
     if is_public and is_public.decode() == "1":
         return True
     return redis_client.sismember(get_users_key(room_id), user_id)
-
-@app.post("/rooms")
-async def create_room(room: Room, current_user: dict = Depends(get_current_user)):
-    """Create a new chat room"""
-    room_id = str(uuid.uuid4())
-    
-    # Store room data in Redis
-    redis_client.hset(
-        get_room_key(room_id),
-        mapping={
-            "id": room_id,
-            "name": room.name,
-            "is_public": "1" if room.isPublic else "0",
-            "creator": current_user.get("sub")
-        }
-    )
-    
-    # Add creator to room's user set
-    user_id = current_user.get("sub")
-    redis_client.sadd(get_users_key(room_id), user_id)
-    
-    # Add room to user's room set
-    redis_client.sadd(get_user_rooms_key(user_id), room_id)
-    
-    return {"id": room_id, "name": room.name, "isPublic": room.isPublic}
 
 @app.get("/user/rooms")
 async def get_user_rooms(current_user: dict = Depends(get_current_user)):
@@ -393,29 +371,25 @@ async def get_rooms(current_user: dict = Depends(get_current_user)):
     all_rooms = []
     
     # Get all room keys safely
-    try:
-        room_keys = redis_client.keys("room:*")
-        for key in room_keys:
-            key_str = key.decode()
-            if key_str.endswith(":users") or key_str.endswith(":pubsub") or key_str.endswith(":messages"):
-                continue
-                
-            room_id = key_str.split(":")[1]
-            try:
-                room_data = redis_client.hgetall(key)
-                if room_data:
-                    is_public = room_data.get(b"is_public", b"0") == b"1"
-                    if is_public or check_room_access(room_id, user_id):
-                        all_rooms.append({
-                            "id": room_id,
-                            "name": room_data.get(b"name", b"").decode(),
-                            "is_public": is_public
-                        })
-            except redis.exceptions.ResponseError:
-                continue  # Skip keys that aren't hashes
-    except Exception as e:
-        print(f"Error getting rooms: {e}")
-        raise HTTPException(status_code=500, detail="Error retrieving rooms")
+    room_keys = redis_client.keys("room:*")
+    for key in room_keys:
+        key_str = key.decode()
+        if key_str.endswith(":users") or key_str.endswith(":pubsub") or key_str.endswith(":messages"):
+            continue
+            
+        room_id = key_str.split(":")[1]
+        try:
+            room_data = redis_client.hgetall(key)
+            if room_data:
+                is_public = room_data.get(b"is_public", b"0") == b"1"
+                if is_public or check_room_access(room_id, user_id):
+                    all_rooms.append({
+                        "id": room_id,
+                        "name": room_data.get(b"name", b"").decode(),
+                        "is_public": is_public
+                    })
+        except redis.exceptions.ResponseError:
+            continue  # Skip keys that aren't hashes
     
     return {"rooms": all_rooms}
 
@@ -467,6 +441,117 @@ async def post_message(room_id: str, message: Message, current_user: dict = Depe
     message_dict['timestamp'] = message_dict['timestamp'].isoformat()
     await manager.broadcast(room_id, message_dict)
     return {"status": "message sent"}
+
+@app.put("/rooms/{room_id}")
+async def update_room(
+    room_id: str,
+    room_update: Room,
+    current_user: dict = Depends(get_current_user)
+):
+    """Update room information"""
+    user_id = current_user.get("sub")
+    if not user_id:
+        raise HTTPException(status_code=400, detail="Invalid user ID")
+    
+    # Check if user is admin of this room
+    if not redis_client.sismember(get_admins_key(room_id), user_id):
+        raise HTTPException(status_code=403, detail="Only admins can update room settings")
+
+    # Update room data in Redis
+    redis_client.hset(
+        get_room_key(room_id),
+        mapping={
+            "name": room_update.name,
+            "is_public": "1" if room_update.isPublic else "0"
+        }
+    )
+    
+    return {"status": "room updated"}
+
+@app.get("/rooms/{room_id}")
+async def get_room(
+    room_id: str,
+    current_user: dict = Depends(get_current_user)
+):
+    """Get details for a specific room, auto-creating DM rooms if needed"""
+    user_id = current_user.get("sub")
+    if not user_id:
+        raise HTTPException(status_code=403, detail="Not authenticated")
+
+    room_key = get_room_key(room_id)
+    if not redis_client.exists(room_key):
+        print(f"Creating new room: {room_id}")  # Debug log
+        is_dm = "_" in room_id
+        if is_dm:
+            members = list(set(room_id.split("_")))  # Remove duplicates
+            if len(members) == 1:  # User messaging themselves
+                members = [members[0], members[0]]
+                room_name = "My Notes"
+            else:
+                room_name = f"DM {room_id[:8]}"
+            
+            # For DM rooms, both users are admins
+            admins = members
+            print(f"Creating DM room between: {members}")  # Debug log
+            
+            # Ensure users exist before creating DM
+            for member in set(members):  # Check unique users only
+                if not redis_client.exists(get_user_key(member)):
+                    raise HTTPException(
+                        status_code=404,
+                        detail=f"User {member} not found"
+                    )
+            
+            # Create the room
+            new_room = {
+                "id": room_id,
+                "name": room_name,
+                "is_public": "0",
+                "creator": user_id
+            }
+            redis_client.hset(room_key, mapping=new_room)
+            
+            # Join all members to the room
+            for member in members:
+                redis_client.sadd(get_users_key(room_id), member)
+                redis_client.sadd(get_user_rooms_key(member), room_id)
+                redis_client.sadd(get_admins_key(room_id), member)
+        else:
+            # Create regular room
+            new_room = {
+                "id": room_id,
+                "name": f"Room {room_id[:8]}",
+                "is_public": "0",
+                "creator": user_id
+            }
+            redis_client.hset(room_key, mapping=new_room)
+            
+            # Join creator to the room
+            redis_client.sadd(get_users_key(room_id), user_id)
+            redis_client.sadd(get_user_rooms_key(user_id), room_id)
+            redis_client.sadd(get_admins_key(room_id), user_id)
+    
+    if not check_room_access(room_id, user_id):
+        raise HTTPException(status_code=403, detail="Access denied")
+    
+    room_data = redis_client.hgetall(get_room_key(room_id))
+    if not room_data:
+        raise HTTPException(status_code=404, detail="Room not found")
+    
+    # Convert bytes to strings
+    room_dict = {k.decode(): v.decode() for k, v in room_data.items()}
+    
+    # Get list of admin user IDs
+    admin_ids = redis_client.smembers(get_admins_key(room_id))
+    admins = [admin_id.decode() for admin_id in admin_ids] if admin_ids else []
+    
+    return {
+        "id": room_id,
+        "name": room_dict.get("name"),
+        "is_public": room_dict.get("is_public") == "1",
+        "creator": room_dict.get("creator"),
+        "admins": admins
+    }
 
 @app.get("/rooms/{room_id}/messages")
 async def get_room_messages(

@@ -18,16 +18,25 @@ const ChatPage: React.FC<ChatPageProps> = () => {
   const navigate = useNavigate();
   const { isAuthenticated, keycloak } = useAuth();
   const { roomId: urlRoomId } = useParams();
-  const [activeRoom, setActiveRoom] = useState<string | null>(urlRoomId || null);
+  const [activeRoom, setActiveRoom] = useState<string | null>(null);
   const [showExplore, setShowExplore] = useState(false);
   const [userRooms, setUserRooms] = useState<Room[]>([]);
 
   useEffect(() => {
-    // If URL has a roomId but our state doesn't, update it
-    if (urlRoomId && !activeRoom) {
+    // Always sync activeRoom with URL
+    if (urlRoomId) {
       setActiveRoom(urlRoomId);
+    } else {
+      setActiveRoom(null);
     }
   }, [urlRoomId]);
+
+  useEffect(() => {
+    // Update URL when activeRoom changes (except initial load)
+    if (activeRoom && activeRoom !== urlRoomId) {
+      navigate(`/chat/${activeRoom}`, { replace: true });
+    }
+  }, [activeRoom]);
 
   useEffect(() => {
     const fetchUserRooms = async () => {
@@ -60,8 +69,11 @@ const ChatPage: React.FC<ChatPageProps> = () => {
   }, [isAuthenticated, keycloak?.token]);
 
   const handleRoomSelect = (roomId: string) => {
-    setActiveRoom(roomId);
-    setShowExplore(false);
+    if (roomId !== activeRoom) {
+      setActiveRoom(roomId);
+      setShowExplore(false);
+      // URL update will be handled by the effect above
+    }
   };
 
   const handleCreateRoom = () => {

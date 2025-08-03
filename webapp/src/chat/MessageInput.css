@@ -1,0 +1,137 @@
+.message-input {
+  padding: 12px 16px;
+  background-color: var(arkavo-dark-orange);
+  border-top: 1px solid #e9ecef;
+}
+
+.message-input-container {
+  position: relative;
+  margin-bottom: 10px;
+}
+
+.message-textarea {
+  width: 100%;
+  min-height: 80px;
+  padding: 12px;
+  border: 2px solid rgba(255, 255, 255, 0.3);
+  border-radius: 8px;
+  resize: none;
+  color: #ffffff !important;
+  font-family: inherit;
+  font-size: larger;
+  background-color: var(arkavo-dark-orange);
+  transition: all 0.2s;
+}
+
+.message-textarea:focus,
+.message-textarea:hover {
+  outline: none;
+  border-color: rgba(255, 255, 255, 0.7);
+  box-shadow: 0 0 0 0.25rem rgba(255, 255, 255, 0.1);
+}
+
+.message-textarea::placeholder {
+  color: rgba(255, 255, 255, 0.7);
+}
+
+.hidden-file-input {
+  display: none;
+}
+
+.add-files-button {
+  background: none;
+  border: none;
+  padding: 8px;
+  margin-right: 8px;
+  cursor: pointer;
+  color: #6c757d;
+  font-size: 20px;
+}
+
+.add-files-button:hover {
+  color: #495057;
+}
+
+.file-previews-container {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+.file-preview {
+  position: relative;
+  width: 80px;
+  height: 80px;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.remove-file-button {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  background-color: rgba(0, 0, 0, 0.5);
+  color: white;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.remove-file-button:hover {
+  background-color: rgba(255, 0, 0, 0.8);
+}
+
+.image-preview {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.video-preview-placeholder,
+.pdf-preview-placeholder {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background-color: #f0f0f0;
+  font-size: 24px;
+}
+
+.pdf-preview-placeholder {
+  background-color: #e9ecef;
+  flex-direction: column;
+}
+
+.pdf-preview-placeholder span {
+  font-size: 32px;
+  margin-bottom: 4px;
+}
+
+.pdf-preview-placeholder::after {
+  content: "PDF";
+  font-size: 12px;
+  color: #495057;
+}
+
+.send-button {
+  background-color: #0d6efd;
+  color: white;
+  border: none;
+  border-radius: 6px;
+  padding: 8px 20px;
+  cursor: pointer;
+  font-weight: 500;
+  transition: background-color 0.2s;
+}
+
+.send-button:hover {
+  background-color: #0b5ed7;
+}

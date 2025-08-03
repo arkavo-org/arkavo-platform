@@ -1,8 +1,11 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
+import { faInfoCircle } from '@fortawesome/free-solid-svg-icons';
 import { useAuth } from '../context/AuthContext';
+import RoomModal from './RoomModal';
 import '../css/ChatPage.css';
 import Profile from '../Profile';
-import UserProfile from '../UserProfile';
+import MessageInput from './MessageInput';
 
 interface Attachment {
   data: string; // base64 encoded
@@ -23,36 +26,20 @@ interface RoomProps {
 
 import { useNavigate, useParams } from 'react-router-dom';
 
-const Room: React.FC<RoomProps> = ({ roomId: initialRoomId }) => {
+const Room: React.FC<RoomProps> = ({ roomId }) => {
   const { keycloak } = useAuth();
   const navigate = useNavigate();
-  const params = useParams();
-  const [roomId, setRoomId] = useState<string>(() => {
-    // Try to get from localStorage first, fallback to prop
-    const savedRoomId = localStorage.getItem('currentRoomId');
-    const currentRoomId = savedRoomId || initialRoomId;
-    
-    // Update URL if needed (initial load)
-    if (params.roomId !== currentRoomId) {
-      navigate(`/chat/${currentRoomId}`, { replace: true });
-    }
-    return currentRoomId;
-  });
-
-  // Update URL whenever roomId changes (including after joining)
-  useEffect(() => {
-    if (params.roomId !== roomId) {
-      navigate(`/chat/${roomId}`, { replace: true });
-      localStorage.setItem('currentRoomId', roomId);
-    }
-  }, [roomId, params.roomId, navigate]);
-
-  // Persist roomId to localStorage whenever it changes
-  useEffect(() => {
-    localStorage.setItem('currentRoomId', roomId);
-  }, [roomId]);
   const [messages, setMessages] = useState<Message[]>([]);
   const [profiles, setProfiles] = useState<{[key: string]: {display_name: string, picture: string}}>({});
+
+  // Fetch messages when roomId changes
+  useEffect(() => {
+    if (roomId) {
+      console.log(`Loading messages for room: ${roomId}`);
+      setMessages([]);
+      fetchMessages();
+    }
+  }, [roomId]);
 
   const fetchProfile = useCallback(async (userId: string) => {
     if (!keycloak || !userId || profiles[userId]) return;
@@ -85,13 +72,8 @@ const Room: React.FC<RoomProps> = ({ roomId: initialRoomId }) => {
       console.error('Error fetching profile:', error);
     }
   }, [keycloak, profiles]);
-  const [newMessage, setNewMessage] = useState('');
-  const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
   const [expandedImage, setExpandedImage] = useState<string | null>(null);
-  const [showProfileModal, setShowProfileModal] = useState(false);
-  const [showUserProfileModal, setShowUserProfileModal] = useState(false);
-  const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
-  const fileInputRef = useRef<HTMLInputElement>(null);
+  // Removed user profile modal state
   const [ws, setWs] = useState<WebSocket | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
@@ -238,131 +220,68 @@ const Room: React.FC<RoomProps> = ({ roomId: initialRoomId }) => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
 
-    const detectFileType = (file: File): Promise<string> => {
-    return new Promise((resolve) => {
-      const reader = new FileReader();
-      reader.onload = (e) => {
-        const arr = new Uint8Array(e.target?.result as ArrayBuffer).subarray(0, 4);
-        let header = '';
-        for (let i = 0; i < arr.length; i++) {
-          header += arr[i].toString(16);
-        }
-        
-        // Check known file signatures
-        switch (header) {
-          case '89504e47': resolve('image/png'); break;
-          case '47494638': resolve('image/gif'); break;
-          case 'ffd8ffe0':
-          case 'ffd8ffe1':
-          case 'ffd8ffe2':
-          case 'ffd8ffe3':
-          case 'ffd8ffe8': resolve('image/jpeg'); break;
-          case '66747970': resolve('video/mp4'); break;
-          case '1a45dfa3': resolve('video/webm'); break;
-          default: resolve(file.type || 'application/octet-stream');
-        }
-      };
-      reader.readAsArrayBuffer(file.slice(0, 4));
-    });
-  };
-
-  const handleSendMessage = async () => {
-    if (!newMessage.trim() && selectedFiles.length === 0) return;
-
+  const fetchMessages = async () => {
+    if (!keycloak?.authenticated) return;
+    
+    const url = `${import.meta.env.VITE_USERS_API_URL}/rooms/${roomId}/messages`;
+    console.log(`Fetching messages from: ${url}`);
     try {
       // Refresh token if needed
       if (keycloak?.isTokenExpired()) {
         await keycloak.updateToken(30);
       }
-
-      // Process attachments
-      const attachments = await Promise.all(
-        selectedFiles.map(async (file) => {
-          const detectedType = await detectFileType(file);
-          const base64Data = await new Promise<string>((resolve) => {
-            const reader = new FileReader();
-            reader.onload = () => resolve((reader.result as string).split(',')[1]);
-            reader.readAsDataURL(file);
-          });
-          
-          return {
-            data: base64Data,
-            mimeType: detectedType
-          };
-        })
-      );
-
-      const message = {
-        text: newMessage,
-        sender: keycloak?.tokenParsed?.sub || "user",
-        timestamp: new Date().toISOString(),
-        attachments: attachments.length > 0 ? attachments.map(att => ({
-          data: att.data,
-          mimeType: att.mimeType
-        })) : undefined,
-        metadata: {} // Ensure metadata exists even if empty
-      };
-
-      const response = await fetch(`${import.meta.env.VITE_USERS_API_URL}/rooms/${roomId}/message`, {
-        method: 'POST',
+      
+      const token = keycloak?.token;
+      if (!token) {
+        console.error('No token available');
+        return;
+      }
+      
+      const response = await fetch(url, {
         headers: {
-          'Authorization': `Bearer ${keycloak?.token}`,
-          'Content-Type': 'application/json',
-          'Accept': 'application/json'
-        },
-        body: JSON.stringify(message, (key, value) => 
-          value === undefined ? null : value // Convert undefined to null
-        )
+          'Authorization': `Bearer ${token}`
+        }
       });
-
       if (response.ok) {
-        setNewMessage('');
-        setSelectedFiles([]); // Clear attachments on successful send
+        const data = await response.json();
+        console.log('Fetched messages:', data.messages);
+        setMessages(data.messages);
+        // Fetch profiles for all unique senders
+        const uniqueSenders = [...new Set(data.messages.map((m: Message) => m.sender))].filter(
+          (sender): sender is string => typeof sender === 'string'
+        );
+        uniqueSenders.forEach(sender => {
+          // Always use the message sender's ID
+          fetchProfile(sender);
+        });
       } else {
-        console.error('Failed to send message:', response.status);
+        console.error('Failed to fetch messages:', {
+          status: response.status,
+          statusText: response.statusText,
+          url: url
+        });
       }
     } catch (error) {
-      console.error('Error sending message:', error);
-    }
-  };
-
-  const handleKeyPress = (e: React.KeyboardEvent) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
-      e.preventDefault();
-      handleSendMessage();
-    }
-  };
-
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files && e.target.files.length > 0) {
-      setSelectedFiles(Array.from(e.target.files));
-    }
-  };
-
-  const removeFile = (index: number) => {
-    setSelectedFiles(prev => prev.filter((_, i) => i !== index));
-  };
-
-  const handleDragOver = (e: React.DragEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-  };
-
-  const handleDrop = (e: React.DragEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-    
-    if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
-      const files = Array.from(e.dataTransfer.files).filter(file => 
-        file.type.startsWith('image/') || file.type.startsWith('video/')
-      );
-      if (files.length > 0) {
-        setSelectedFiles(prev => [...prev, ...files]);
-      }
+      console.error('Error fetching messages:', {
+        error: error,
+        url: url
+      });
     }
   };
 
   const [isMember, setIsMember] = useState(false);
+  const [showRoomInfoModal, setShowRoomInfoModal] = useState(false);
+  const [roomInfo, setRoomInfo] = useState<{
+    name: string;
+    isPublic: boolean;
+    creator?: string;
+    admins?: string[];
+  } | null>(null);
+  const [isEditingRoom, setIsEditingRoom] = useState(false);
+  const [editedRoomInfo, setEditedRoomInfo] = useState({
+    name: '',
+    isPublic: false
+  });
 
   useEffect(() => {
     const checkRoomMembership = async () => {
@@ -394,6 +313,96 @@ const Room: React.FC<RoomProps> = ({ roomId: initialRoomId }) => {
     checkRoomMembership();
   }, [roomId, keycloak, keycloak?.authenticated]);
 
+  const fetchRoomInfo = async () => {
+    try {
+      if (keycloak?.isTokenExpired()) {
+        await keycloak.updateToken(30);
+      }
+
+      const response = await fetch(
+        `${import.meta.env.VITE_USERS_API_URL}/rooms/${roomId}`,
+        {
+          headers: {
+            Authorization: `Bearer ${keycloak?.token}`
+          }
+        }
+      );
+
+      if (response.ok) {
+        const data = await response.json();
+        setRoomInfo(data);
+      }
+    } catch (error) {
+      console.error('Error fetching room info:', error);
+    }
+  };
+
+  const handleRoomInfoClick = async () => {
+    await fetchRoomInfo();
+    if (roomInfo) {
+      setEditedRoomInfo({
+        name: roomInfo.name,
+        isPublic: roomInfo.isPublic
+      });
+    }
+    setShowRoomInfoModal(true);
+    setIsEditingRoom(false);
+  };
+
+  const handleSaveRoom = async () => {
+    if (!roomInfo || !keycloak?.token) return;
+    
+    try {
+      if (keycloak.isTokenExpired()) {
+        await keycloak.updateToken(30);
+      }
+
+      const response = await fetch(
+        `${import.meta.env.VITE_USERS_API_URL}/rooms/${roomId}`,
+        {
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${keycloak.token}`
+          },
+          body: JSON.stringify(editedRoomInfo)
+        }
+      );
+
+      if (response.ok) {
+        await fetchRoomInfo();
+        setIsEditingRoom(false);
+      }
+    } catch (error) {
+      console.error('Error updating room:', error);
+    }
+  };
+
+  const GetRoomCreateIfDNE = useCallback(async (roomId: string) => {
+    try {
+      if (keycloak?.isTokenExpired()) {
+        await keycloak.updateToken(30);
+      }
+      
+      const response = await fetch(
+        `${import.meta.env.VITE_USERS_API_URL}/rooms/${roomId}`,
+        {
+          headers: {
+            Authorization: `Bearer ${keycloak?.token}`
+          }
+        }
+      );
+      
+      if (!response.ok) {
+        console.error('Failed to get/create room:', response.status);
+      }
+      return response.ok;
+    } catch (error) {
+      console.error('Error getting/creating room:', error);
+      return false;
+    }
+  }, [keycloak]);
+
   const handleJoinRoom = async () => {
     try {
       if (keycloak?.isTokenExpired()) {
@@ -403,7 +412,7 @@ const Room: React.FC<RoomProps> = ({ roomId: initialRoomId }) => {
       const response = await fetch(
         `${import.meta.env.VITE_USERS_API_URL}/rooms/${roomId}/join`,
         {
-          method: 'POST',
+          method: 'GET',
           headers: {
             Authorization: `Bearer ${keycloak?.token}`
           }
@@ -414,7 +423,8 @@ const Room: React.FC<RoomProps> = ({ roomId: initialRoomId }) => {
         setIsMember(true);
         // Update URL to reflect the joined room
         navigate(`/chat/${roomId}`, { replace: true });
-        // Refresh the room list by calling the original fetch messages function
+        
+        // Refresh messages for current room
         const fetchMessages = async () => {
           const url = `${import.meta.env.VITE_USERS_API_URL}/rooms/${roomId}/messages`;
           const response = await fetch(url, {
@@ -427,7 +437,25 @@ const Room: React.FC<RoomProps> = ({ roomId: initialRoomId }) => {
             setMessages(data.messages);
           }
         };
-        fetchMessages();
+        
+        // Fetch updated room list
+        const fetchUserRooms = async () => {
+          const response = await fetch(
+            `${import.meta.env.VITE_USERS_API_URL}/user/rooms`,
+            {
+              headers: {
+                Authorization: `Bearer ${keycloak?.token}`
+              }
+            }
+          );
+          if (response.ok) {
+            const data = await response.json();
+            // Trigger room list update in parent via URL change
+            navigate(`/chat/${roomId}`, { replace: true });
+          }
+        };
+
+        await Promise.all([fetchMessages(), fetchUserRooms()]);
       }
     } catch (error) {
       console.error('Error joining room:', error);
@@ -436,6 +464,12 @@ const Room: React.FC<RoomProps> = ({ roomId: initialRoomId }) => {
 
   return (
     <div className="chat-area">
+      <button 
+        onClick={handleRoomInfoClick}
+        className="room-info-button"
+      >
+        <FontAwesomeIcon icon={faInfoCircle} />
+      </button>
       {expandedImage && (
         <div className="image-expanded-overlay" onClick={() => setExpandedImage(null)}>
           <div className="image-expanded-container">
@@ -456,7 +490,27 @@ const Room: React.FC<RoomProps> = ({ roomId: initialRoomId }) => {
           </div>
         </div>
       )}
-      
+
+      {showRoomInfoModal && roomInfo && (
+        <RoomModal
+          roomId={roomId}
+          roomInfo={roomInfo}
+          editedRoomInfo={editedRoomInfo}
+          isEditingRoom={isEditingRoom}
+          profiles={profiles}
+          onClose={() => setShowRoomInfoModal(false)}
+          onSave={handleSaveRoom}
+          onEditChange={(field, value) => {
+            const newValue = field === 'isPublic' ? Boolean(value) : value;
+            setEditedRoomInfo({
+              ...editedRoomInfo,
+              [field]: newValue
+            });
+          }}
+          onToggleEdit={() => setIsEditingRoom(!isEditingRoom)}
+        />
+      )}
+
       <div className="message-area">
         {messages.sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime()).map((msg, index) => (
           <div key={index} className="message-item">
@@ -467,12 +521,13 @@ const Room: React.FC<RoomProps> = ({ roomId: initialRoomId }) => {
                   `data:image/jpeg;base64,${profiles[msg.sender].picture}`} 
                 className="room-avatar" 
                 alt={profiles[msg.sender].display_name}
-                onClick={() => {
-                  if (msg.sender === keycloak?.tokenParsed?.sub) {
-                    setShowProfileModal(true);
-                  } else {
-                    setSelectedUserId(msg.sender);
-                    setShowUserProfileModal(true);
+                onClick={async () => {
+                  const currentUserId = keycloak?.tokenParsed?.sub;
+                  if (currentUserId && msg.sender) {
+                    const dmRoomId = [currentUserId, msg.sender].sort().join('_');
+                    if (await GetRoomCreateIfDNE(dmRoomId)) {
+                      navigate(`/chat/${dmRoomId}`);
+                    }
                   }
                 }}
                 style={{cursor: 'pointer'}}
@@ -480,12 +535,13 @@ const Room: React.FC<RoomProps> = ({ roomId: initialRoomId }) => {
             ) : (
               <div 
                 className="room-avatar"
-                onClick={() => {
-                  if (msg.sender === keycloak?.tokenParsed?.sub) {
-                    setShowProfileModal(true);
-                  } else {
-                    setSelectedUserId(msg.sender);
-                    setShowUserProfileModal(true);
+                onClick={async () => {
+                  const currentUserId = keycloak?.tokenParsed?.sub;
+                  if (currentUserId && msg.sender) {
+                    const dmRoomId = [currentUserId, msg.sender].sort().join('_');
+                    if (await GetRoomCreateIfDNE(dmRoomId)) {
+                      navigate(`/chat/${dmRoomId}`);
+                    }
                   }
                 }}
                 style={{cursor: 'pointer'}}
@@ -517,6 +573,20 @@ const Room: React.FC<RoomProps> = ({ roomId: initialRoomId }) => {
                   controls
                   className="message-attachment"
                 />
+              ) : attachment.mimeType === 'application/pdf' ? (
+                <div className="pdf-attachment">
+                  <div className="pdf-preview">
+                    <span>📄</span>
+                    <div>PDF Document</div>
+                  </div>
+                  <a 
+                    href={dataUrl} 
+                    download={`document-${new Date(msg.timestamp).getTime()}.pdf`}
+                    className="pdf-download-button"
+                  >
+                    Download
+                  </a>
+                </div>
               ) : (
                 <div className="generic-attachment">
                   [Unsupported media type: {attachment.mimeType}]
@@ -533,66 +603,10 @@ const Room: React.FC<RoomProps> = ({ roomId: initialRoomId }) => {
       </div>
 
       {isMember ? (
-        <div className="message-input">
-          <div 
-            className="message-input-container"
-            onDragOver={handleDragOver}
-            onDrop={handleDrop}
-          >
-            <textarea
-              value={newMessage}
-              onChange={(e) => setNewMessage(e.target.value)}
-              onKeyDown={handleKeyPress}
-              placeholder="Type a message or drag files here..."
-              className="message-textarea"
-            />
-            {selectedFiles.length === 0 && (
-              <div className="drop-zone-overlay">
-                Drop files here
-              </div>
-            )}
-          </div>
-          <input 
-            ref={fileInputRef}
-            type="file" 
-            accept="image/*,video/*" 
-            onChange={handleFileChange}
-            className="hidden-file-input"
-            multiple
-          />
-          <button 
-            onClick={() => fileInputRef.current?.click()}
-            className="add-files-button"
-          >
-            Add Files
-          </button>
-          {selectedFiles.length > 0 && (
-            <div className="file-previews-container">
-              {selectedFiles.map((file, index) => (
-                <div key={index} className="file-preview">
-                  <span 
-                    onClick={() => removeFile(index)}
-                    className="remove-file-button"
-                  >
-                    ×
-                  </span>
-                  {file.type.startsWith('image/') ? (
-                    <img 
-                      src={URL.createObjectURL(file)} 
-                      alt="Preview" 
-                      className="image-preview"
-                    />
-                  ) : (
-                    <div className="video-preview-placeholder">
-                      <span>🎥</span>
-                    </div>
-                  )}
-                </div>
-              ))}
-            </div>
-          )}
-          <button onClick={handleSendMessage} className="send-button">Send</button>
-        </div>
+        <MessageInput
+          roomId={roomId}
+          onSend={fetchMessages}
+        />
       ) : (
         <div className="join-room-container">
           <button onClick={handleJoinRoom} className="join-room-button">
