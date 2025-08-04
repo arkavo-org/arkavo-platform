@@ -1,6 +1,8 @@
 import React, { useEffect, useState } from 'react';
 import { AuthProvider as AuthContextProvider } from '../context/AuthContext';
 import Keycloak from "keycloak-js";
+import { AuthProvider as TDFAuthProvider, HttpRequest, NanoTDFDatasetClient } from '@opentdf/sdk';
+import { DatasetConfig } from '@opentdf/sdk/nano';
 
 // Configuration from environment variables
 const keycloakConfig = {
@@ -129,6 +131,33 @@ const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
+  const [tdfClient, setTdfClient] = useState<NanoTDFDatasetClient | null>(null);
+
+  const initializeTdfClient = async () => {
+    if (!keycloak?.authenticated) return;
+
+    try {
+      const authProvider: TDFAuthProvider = {
+        async updateClientPublicKey(): Promise<void> {
+          return;
+        },
+        withCreds(httpReq: HttpRequest): Promise<HttpRequest> {
+          httpReq.headers.Authorization = `Bearer ${keycloak?.token}`;
+          return Promise.resolve(httpReq);
+        }
+      };
+
+      const client = new NanoTDFDatasetClient({
+        authProvider,
+        kasEndpoint: import.meta.env.VITE_KAS_ENDPOINT,
+      } as DatasetConfig);
+
+      setTdfClient(client);
+      console.log('TDF client initialized successfully');
+    } catch (error) {
+      console.error('Failed to initialize TDF client:', error);
+    }
+  };
 
   // Initialize Keycloak
   useEffect(() => {
@@ -140,6 +169,11 @@ const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         if (authenticated) {
           const profile = await getUserProfile();
           setUserProfile(profile);
+          // Initialize TDF client on first load
+          if (!tdfClient) {
+            console.log('Initializing TDF client');
+            await initializeTdfClient();
+          }
         }
       } catch (error) {
         console.error('Auth initialization error:', error);
@@ -211,6 +245,7 @@ const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         isLoading,
         userProfile,
         keycloak,
+        tdfClient,
         login: handleLogin,
         logout: () => {
           try {

@@ -19,22 +19,20 @@ const CreateRoom: React.FC = () => {
             return;
         }
 
-        const response = await fetch(`${import.meta.env.VITE_USERS_API_URL}/rooms`, {
-            method: 'POST',
+        // Generate random UUID for room ID
+        const roomId = crypto.randomUUID();
+        
+        const response = await fetch(`${import.meta.env.VITE_USERS_API_URL}/rooms/${roomId}?is_public=${isPublic}`, {
+            method: 'GET',
             headers: {
                 'Content-Type': 'application/json',
                 Authorization: `Bearer ${keycloak?.token}`
-            },
-            body: JSON.stringify({
-                name: roomName,
-                isPublic: isPublic
-            })
+            }
         });
 
         console.log('Response status:', response.status);
         if (response.ok) {
-            const data = await response.json();
-            navigate(`/chat?roomid=${data.room_id}`);
+            navigate(`/chat?roomid=${roomId}`);
         } else {
             setError('Failed to create room');
         }

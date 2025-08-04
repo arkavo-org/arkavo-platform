@@ -7,7 +7,7 @@ import Room from "./Room";
 import ExploreRooms from "./ExploreRooms";
 
 function getOtherUserId(roomId: string, currentUserId: string): string {
-  const [id1, id2] = roomId.split('_');
+  const [id1, id2] = roomId.split("_");
   return id1 === currentUserId ? id2 : id1;
 }
 
@@ -67,7 +67,9 @@ const ChatPage: React.FC<ChatPageProps> = () => {
           // Pre-fetch display names for DM rooms
           if (keycloak?.tokenParsed?.sub) {
             const currentUserId = keycloak.tokenParsed.sub;
-            const dmRooms = data.rooms.filter((room: Room) => room.id.includes('_'));
+            const dmRooms = data.rooms.filter((room: Room) =>
+              room.id.includes("_")
+            );
             const displayNamePromises = dmRooms.map(async (room: Room) => {
               const otherUserId = getOtherUserId(room.id, currentUserId);
               const name = await fetchDisplayName(otherUserId);
@@ -75,12 +77,15 @@ const ChatPage: React.FC<ChatPageProps> = () => {
             });
 
             const displayNameResults = await Promise.all(displayNamePromises);
-            const newDisplayNames = displayNameResults.reduce((acc, { otherUserId, name }) => {
-              acc[otherUserId] = name;
-              return acc;
-            }, {} as Record<string, string>);
+            const newDisplayNames = displayNameResults.reduce(
+              (acc, { otherUserId, name }) => {
+                acc[otherUserId] = name;
+                return acc;
+              },
+              {} as Record<string, string>
+            );
 
-            setDisplayNames(prev => ({ ...prev, ...newDisplayNames }));
+            setDisplayNames((prev) => ({ ...prev, ...newDisplayNames }));
           }
         }
       } catch (error) {
@@ -126,10 +131,10 @@ const ChatPage: React.FC<ChatPageProps> = () => {
       setShowExplore(false);
       // URL update will be handled by the effect above
 
-      if (roomId.includes('_') && keycloak?.tokenParsed?.sub) {
+      if (roomId.includes("_") && keycloak?.tokenParsed?.sub) {
         const otherUserId = getOtherUserId(roomId, keycloak.tokenParsed.sub);
         const name = await fetchDisplayName(otherUserId);
-        setDisplayNames(prev => ({ ...prev, [otherUserId]: name }));
+        setDisplayNames((prev) => ({ ...prev, [otherUserId]: name }));
       }
     }
   };
@@ -140,17 +145,19 @@ const ChatPage: React.FC<ChatPageProps> = () => {
 
   return (
     <div className="chat-page">
-      <div className="sidebar">
+      <div className="sidebar" style={{ display: "block" }}>
         <h2>Chat Rooms</h2>
         <div className="room-list">
-          {userRooms.map((room) => (
+          {userRooms?.map((room) => (
             <div
               key={room.id}
               className={`room-item ${activeRoom === room.id ? "active" : ""}`}
               onClick={() => handleRoomSelect(room.id)}
             >
-              {room.id.includes("_") && keycloak?.tokenParsed?.sub ? 
-                displayNames[getOtherUserId(room.id, keycloak.tokenParsed.sub)] || "Loading..."
+              {room.id.includes("_") && keycloak?.tokenParsed?.sub
+                ? displayNames[
+                    getOtherUserId(room.id, keycloak.tokenParsed.sub)
+                  ] || "Loading..."
                 : room.name}
             </div>
           ))}
@@ -164,16 +171,15 @@ const ChatPage: React.FC<ChatPageProps> = () => {
           </button>
         </div>
       </div>
-
-      {showExplore ? (
-        <ExploreRooms onRoomSelect={handleRoomSelect} />
-      ) : activeRoom ? (
-        <Room roomId={activeRoom} />
-      ) : (
-        <div className="select-room">
-          <h3>Select a room to start chatting</h3>
-        </div>
-      )}
+      <div className="chat-area">
+        {showExplore && <ExploreRooms onRoomSelect={handleRoomSelect} />}
+        {!showExplore && activeRoom && <Room roomId={activeRoom} />}
+        {!showExplore && !activeRoom && (
+          <div className="select-room">
+            <h3>Select a room to start chatting</h3>
+          </div>
+        )}
+      </div>
     </div>
   );
 };

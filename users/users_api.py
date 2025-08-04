@@ -8,10 +8,10 @@ import keycloak
 from PIL import Image
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from fastapi.websockets import WebSocketState
-from pydantic import BaseModel
-from typing import Optional, List, Dict
+from typing import Optional, List, Dict, Union
 from datetime import datetime, timezone
 import requests
+import json
 import base64
 import redis
 import keycloak
@@ -31,50 +31,13 @@ security = HTTPBearer()
 # Redis setup
 redis_client = redis.Redis(host='redis_messaging', port=6379, db=0, password=REDIS_PASSWORD)
 
-# Pydantic models
-class UserBase(BaseModel):
-    uuid: str
-    name: str
-    display_name: str
-    bio: Optional[str]
-    street: Optional[str]
-    city: Optional[str]
-    state: Optional[str]
-    zip_code: Optional[str]
-    country: Optional[str]
-
-
-class UserCreate(UserBase):
-    pass
-
-class User(UserBase):
-    class Config:
-        from_attributes = True
-
 # JWT Authentication with python-jose
 async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(security)):
     token = credentials.credentials
     return await keycloak.verify_token(token)
 
-# Message models and storage
-class Attachment(BaseModel):
-    data: str  # base64 encoded
-    mimeType: str
-
-class Message(BaseModel):
-    text: str
-    sender: str
-    timestamp: datetime
-    attachments: Optional[List[Attachment]] = None
-    metadata: Optional[dict] = None
-
-messages_all_languages: List[Message] = []
+messages_all_languages: List[Dict] = []
 messages_by_language = {}
-
-class Room(BaseModel):
-    name: str
-    isPublic: bool
-    id: str = None
 
 class ConnectionManager:
     def __init__(self):
@@ -107,34 +70,27 @@ async def translate_message_async(
     session: aiohttp.ClientSession,
     lang_code: str,
     source_lang: str,
-    message: Message
-) -> tuple[str, Message]:
-    try:
-        if lang_code != source_lang:
-            async with session.post(
-                "http://libretranslate:5000/translate",
-                json={
-                    "q": message.text,
-                    "source": source_lang,
-                    "target": lang_code
-                }
-            ) as response:
-                response.raise_for_status()
-                data = await response.json()
-                translated_text = data["translatedText"]
+    message: Dict
+) -> tuple[str, Dict]:
+    og_text = message['text']
+    if lang_code != source_lang:
+        async with session.post(
+            "http://libretranslate:5000/translate",
+            json={
+                "q": og_text,
+                "source": source_lang,
+                "target": lang_code
+            }
+        ) as response:
+            response.raise_for_status()
+            data = await response.json()
+            translated_text = data["translatedText"]
 
-                translated_msg = Message(
-                    text=translated_text,
-                    sender=message.sender,
-                    timestamp=message.timestamp,
-                    metadata={"original_text": message.text, "source_language": source_lang}
-                )
-                return lang_code, translated_msg
-        else:
+            message['text'] = translated_text
+            message["metadata"] = {"original_content": og_text, "source_language": source_lang}
             return lang_code, message
-    except Exception as e:
-        print(f"Failed to translate message from {source_lang} to {lang_code}: {e}")
-        return lang_code, None
+    else:
+        return lang_code, message
 
 
 # Fetch LibreTranslate languages on startup
@@ -154,9 +110,9 @@ async def startup_event():
 def get_user_key(uuid: str) -> str:
     return f"user:{uuid}"
 
-@app.post("/users/", response_model=User)
+@app.post("/users/", response_model=Dict)
 def create_user(
-    user: UserCreate,
+    user: Dict,
     current_user: dict = Depends(get_current_user)
 ):
     uuid = current_user.get("sub")
@@ -164,12 +120,12 @@ def create_user(
         raise HTTPException(status_code=400, detail="Invalid token: missing user UUID")
     
     # Ensure UUID is set in user data
-    user.uuid = uuid
+    user["uuid"] = uuid
     user_key = get_user_key(uuid)
-    redis_client.hset(user_key, mapping=user.dict())
+    redis_client.hset(user_key, mapping=user)
     return user
 
-@app.get("/users/{uuid}", response_model=User)
+@app.get("/users/{uuid}", response_model=Dict)
 def read_user(
     uuid: str,
     current_user: dict = Depends(get_current_user)
@@ -181,63 +137,7 @@ def read_user(
     
     # Convert bytes to strings
     user_dict = {k.decode(): v.decode() for k, v in user_data.items()}
-    return User(**user_dict)
-
-@app.post("/users/picture")
-async def upload_profile_picture(
-    picture: UploadFile = File(..., description="The image file to upload"),
-    current_user: dict = Depends(get_current_user)
-):
-    """Upload a profile picture for the specified user.
-    
-    Accepts multipart/form-data with a single file field named 'picture'.
-    The file must be an image (JPEG, PNG, GIF, or WebP).
-    Returns the image as base64 encoded string.
-    """
-    # Get user UUID from auth token
-    uuid = current_user.get("sub")
-    if not uuid:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN, 
-            detail="No user ID found in auth token"
-        )
-
-    # Validate file is an image
-    if not picture.content_type or not picture.content_type.startswith('image/'):
-        raise HTTPException(
-            status_code=400, 
-            detail=f"File must be an image. Received content type: {picture.content_type}"
-        )
-        
-    try:
-        # Read and process image
-        image_bytes = await picture.read()
-        img = Image.open(io.BytesIO(image_bytes))
-        
-        # Convert to RGB if needed
-        if img.mode in ('RGBA', 'P'):
-            img = img.convert('RGB')
-            
-        # Resize to 512x512 with padding
-        img.thumbnail((512, 512))
-        new_img = Image.new('RGB', (512, 512), (255, 255, 255))
-        new_img.paste(img, (
-            (512 - img.width) // 2,
-            (512 - img.height) // 2
-        ))
-        
-        # Convert to base64
-        buffered = io.BytesIO()
-        new_img.save(buffered, format="JPEG")
-        img_str = base64.b64encode(buffered.getvalue()).decode("utf-8")
-        
-        # Update user record in Redis
-        user_key = get_user_key(uuid)
-        redis_client.hset(user_key, "picture", img_str)
-        
-        return {"picture": img_str}
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error processing image: {str(e)}")
+    return user_dict
 
 @app.put("/profile")
 async def update_user(
@@ -277,14 +177,6 @@ async def get_current_user_profile(
 
     # Convert bytes to strings
     profile_data = {k.decode(): v.decode() for k, v in user_data.items()}
-
-    # Get default image if no picture set
-    default_image_path = os.path.join(current_dir, "..", "webapp", "public", "assets", "dummy-image.jpg")
-    picture = profile_data.get("picture")
-    if not picture and os.path.exists(default_image_path):
-        with open(default_image_path, "rb") as image_file:
-            picture = base64.b64encode(image_file.read()).decode("utf-8")
-        profile_data["picture"] = picture
 
     # Return all profile fields for own profile
     return profile_data
@@ -365,7 +257,7 @@ async def get_user_rooms(current_user: dict = Depends(get_current_user)):
     return {"rooms": rooms}
 
 @app.get("/rooms")
-async def get_rooms(current_user: dict = Depends(get_current_user)):
+async def get_rooms(current_user: list = Depends(get_current_user)):
     """Get list of public rooms + private rooms user is invited to"""
     user_id = current_user.get("sub")
     all_rooms = []
@@ -391,7 +283,7 @@ async def get_rooms(current_user: dict = Depends(get_current_user)):
         except redis.exceptions.ResponseError:
             continue  # Skip keys that aren't hashes
     
-    return {"rooms": all_rooms}
+    return all_rooms
 
 @app.post("/rooms/{room_id}/join")
 async def join_room(room_id: str, current_user: dict = Depends(get_current_user)):
@@ -407,45 +299,31 @@ async def join_room(room_id: str, current_user: dict = Depends(get_current_user)
     return {"status": "joined"}
 
 @app.post("/rooms/{room_id}/message")
-async def post_message(room_id: str, message: Message, current_user: dict = Depends(get_current_user)):
-    """Post message to room"""
+async def post_message(room_id: str, message: dict, current_user: dict = Depends(get_current_user)):
+    """Post message to room - handles all message types uniformly"""
     user_id = current_user.get("sub")
     if not check_room_access(room_id, user_id):
         raise HTTPException(status_code=403, detail="Access denied")
     
-    # Set message metadata if not provided
-    if not message.sender:
-        message.sender = current_user.get("preferred_username", "anonymous")
-    if not message.timestamp:
-        message.timestamp = datetime.now(timezone.utc)
+    # Enforce sender and timestamp as server understands them
+    message["sender"] = user_id
+    message["timestamp"] = datetime.now(timezone.utc).isoformat()
     
     # Store message in Redis list (persistent storage)
     message_key = f"room:{room_id}:messages"
-    redis_client.lpush(message_key, message.json())
+    redis_client.lpush(message_key, json.dumps(message))
     
     # Publish to Redis pubsub for real-time delivery
-    redis_client.publish(get_pubsub_key(room_id), message.json())
-    
-    # Convert attachments to URLs for WebSocket clients
-    if message.attachments:
-        message_dict = message.dict()
-        message_dict['attachments'] = [
-            {'url': f"data:{att.mimeType};base64,{att.data}"}
-            for att in message.attachments
-        ]
-    else:
-        message_dict = message.dict()
+    redis_client.publish(get_pubsub_key(room_id), json.dumps(message))
     
     # Broadcast to all WebSocket connections in this room
-    message_dict = message.dict()
-    message_dict['timestamp'] = message_dict['timestamp'].isoformat()
-    await manager.broadcast(room_id, message_dict)
+    await manager.broadcast(room_id, message)
     return {"status": "message sent"}
 
 @app.put("/rooms/{room_id}")
 async def update_room(
     room_id: str,
-    room_update: Room,
+    room_update: dict,
     current_user: dict = Depends(get_current_user)
 ):
     """Update room information"""
@@ -457,14 +335,17 @@ async def update_room(
     if not redis_client.sismember(get_admins_key(room_id), user_id):
         raise HTTPException(status_code=403, detail="Only admins can update room settings")
 
+    print(f"Updating room {room_id} with data: {room_update}")  # Debug log
+
     # Update room data in Redis
     redis_client.hset(
         get_room_key(room_id),
-        mapping={
-            "name": room_update.name,
-            "is_public": "1" if room_update.isPublic else "0"
-        }
+        mapping=room_update
     )
+    
+    # Verify the update was successful
+    updated_data = redis_client.hgetall(get_room_key(room_id))
+    print(f"Room data after update: {updated_data}")  # Debug log
     
     return {"status": "room updated"}
 
@@ -479,66 +360,37 @@ async def get_room(
         raise HTTPException(status_code=403, detail="Not authenticated")
 
     room_key = get_room_key(room_id)
+
+    # Check if room exists, if not create it
     if not redis_client.exists(room_key):
         print(f"Creating new room: {room_id}")  # Debug log
         is_dm = "_" in room_id
         if is_dm:
-            members = list(set(room_id.split("_")))  # Remove duplicates
-            if len(members) == 1:  # User messaging themselves
-                members = [members[0], members[0]]
-                room_name = "My Notes"
-            else:
-                room_name = f"DM {room_id[:8]}"
-            
-            # For DM rooms, both users are admins
-            admins = members
-            print(f"Creating DM room between: {members}")  # Debug log
-            
-            # Ensure users exist before creating DM
-            for member in set(members):  # Check unique users only
-                if not redis_client.exists(get_user_key(member)):
-                    raise HTTPException(
-                        status_code=404,
-                        detail=f"User {member} not found"
-                    )
-            
-            # Create the room
-            new_room = {
-                "id": room_id,
-                "name": room_name,
-                "is_public": "0",
-                "creator": user_id
-            }
-            redis_client.hset(room_key, mapping=new_room)
-            
-            # Join all members to the room
-            for member in members:
-                redis_client.sadd(get_users_key(room_id), member)
-                redis_client.sadd(get_user_rooms_key(member), room_id)
-                redis_client.sadd(get_admins_key(room_id), member)
+            admins = list(set(room_id.split("_")))  # Remove duplicates
         else:
-            # Create regular room
-            new_room = {
-                "id": room_id,
-                "name": f"Room {room_id[:8]}",
-                "is_public": "0",
-                "creator": user_id
-            }
-            redis_client.hset(room_key, mapping=new_room)
-            
-            # Join creator to the room
-            redis_client.sadd(get_users_key(room_id), user_id)
-            redis_client.sadd(get_user_rooms_key(user_id), room_id)
-            redis_client.sadd(get_admins_key(room_id), user_id)
+            admins = [user_id]
+        
+        # Create regular room
+        new_room = {
+            "id": room_id,
+            "name": f"Room {room_id[:8]}",
+            "is_public": 0,
+            "creator": user_id
+        }
+        redis_client.hset(room_key, mapping=new_room)
+        
+        # For DM rooms, add both users as members and admins
+        for user in admins:  # admins contains both users for DM rooms
+            redis_client.sadd(get_users_key(room_id), user)
+            redis_client.sadd(get_user_rooms_key(user), room_id)
+            redis_client.sadd(get_admins_key(room_id), user)
     
+    # Check if user has access to the room
     if not check_room_access(room_id, user_id):
         raise HTTPException(status_code=403, detail="Access denied")
     
-    room_data = redis_client.hgetall(get_room_key(room_id))
-    if not room_data:
-        raise HTTPException(status_code=404, detail="Room not found")
-    
-    # Convert bytes to strings
+    # Get room data from Redis and convert bytes to strings
+    room_data = redis_client.hgetall(room_key)
     room_dict = {k.decode(): v.decode() for k, v in room_data.items()}
     
     # Get list of admin user IDs
@@ -548,7 +400,7 @@ async def get_room(
     return {
         "id": room_id,
         "name": room_dict.get("name"),
-        "is_public": room_dict.get("is_public") == "1",
+        "is_public": int(room_dict.get("is_public", 0)),
         "creator": room_dict.get("creator"),
         "admins": admins
     }
@@ -564,12 +416,17 @@ async def get_room_messages(
     
     message_key = f"room:{room_id}:messages"
     messages = redis_client.lrange(message_key, 0, -1)
-    return {
-        "messages": [
-            Message.parse_raw(msg.decode('utf-8')).dict() 
-            for msg in messages
-        ]
-    }
+    parsed_messages = []
+    
+    for msg in messages:
+        try:
+            msg_data = json.loads(msg.decode('utf-8'))
+            parsed_messages.append(msg_data)
+        except Exception as e:
+            print(f"Error parsing message: {e}")
+            continue
+            
+    return {"messages": parsed_messages}
 
 @app.post("/rooms/{room_id}/invite")
 async def invite_user(room_id: str, user_id: str, current_user: dict = Depends(get_current_user)):
@@ -606,11 +463,10 @@ async def websocket_endpoint(websocket: WebSocket, room_id: str):
 
     while True:
         data = await websocket.receive_json()
-        if data.get("type") == "message":
-            try:
-                await post_message(room_id, Message(**data), payload)
-            except Exception as e:
-                print(f"Error processing message: {e}")
+        try:
+            await post_message(room_id, data, payload)
+        except Exception as e:
+            print(f"Error processing message: {e}")
                 
 # Redis setup
 redis_client = redis.Redis(host='redis_messaging', port=6379, db=0, password=REDIS_PASSWORD)

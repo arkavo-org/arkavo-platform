@@ -27,8 +27,11 @@ const ExploreRooms: React.FC<ExploreRoomsProps> = ({ onRoomSelect }) => {
         });
         
         if (response.ok) {
-          const data = await response.json();
-          setRooms(data.rooms);
+          const rooms = await response.json();
+          console.log('Fetched rooms:', rooms);
+          setRooms(Array.isArray(rooms) ? rooms : []);
+        } else {
+          console.error('Failed to fetch rooms:', response.status, response.statusText);
         }
       } catch (error) {
         console.error('Error fetching rooms:', error);
@@ -67,7 +70,7 @@ const ExploreRooms: React.FC<ExploreRoomsProps> = ({ onRoomSelect }) => {
     <div className="chat-area">
       <h3>Available Rooms</h3>
       <div className="rooms-list">
-        {rooms.map(room => (
+        {rooms?.map(room => (
           <div key={room.id} className="room-item" onClick={() => handleJoinRoom(room.id)}>
             <div className="room-avatar">{room.name.charAt(0).toUpperCase()}</div>
             <div>
