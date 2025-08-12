@@ -133,7 +133,9 @@ const MessageInput: React.FC<MessageInputProps> = ({
         })
       );
 
+      const messageId = crypto.randomUUID();
       let content_dict = {
+        uuid: messageId,
         text: message_text,
         ...(attachments.length > 0 && { attachments }),
       };

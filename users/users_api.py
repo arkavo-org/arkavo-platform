@@ -41,27 +41,32 @@ messages_by_language = {}
 
 class ConnectionManager:
     def __init__(self):
-        self.room_connections: Dict[str, Dict[str, WebSocket]] = {}
+        self.client_connections: Dict[str, WebSocket] = {}
 
-    async def connect(self, websocket: WebSocket, client_id: str, room_id: str):
-        if room_id not in self.room_connections:
-            self.room_connections[room_id] = {}
-        self.room_connections[room_id][client_id] = websocket
+    async def connect(self, websocket: WebSocket, client_id: str):
+        print(f"Client {client_id} connected")
+        self.client_connections[client_id] = websocket
 
-    def disconnect(self, client_id: str, room_id: str):
-        if room_id in self.room_connections:
-            self.room_connections[room_id].pop(client_id, None)
-            if not self.room_connections[room_id]:
-                del self.room_connections[room_id]
+    def disconnect(self, client_id: str):
+        if client_id in self.client_connections:
+            self.client_connections.pop(client_id, None)
 
-    async def broadcast(self, room_id: str, message: dict):
-        connections = self.room_connections.get(room_id, {})
-        for websocket in list(connections.values()):
-            if websocket.client_state == WebSocketState.CONNECTED:
-                try:
-                    await websocket.send_json(message)
-                except Exception as e:
-                    print(f"Error sending to client in room {room_id}: {e}")
+    async def broadcast(self, room_id: str, message: Dict):
+        # Get all users in this room from Redis
+        room_users_key = f"room:{room_id}:users"
+        user_ids = [uid.decode() for uid in redis_client.smembers(room_users_key)]
+        print(f"Broadcasting message to room {room_id} users: {user_ids}")
+        print(f"Current connections: {self.client_connections.keys()}")
+        
+        # Send message to all connected users in the room
+        for user_id in user_ids:
+            if user_id in self.client_connections:
+                websocket = self.client_connections[user_id]
+                if websocket.client_state == WebSocketState.CONNECTED:
+                    try:
+                        await websocket.send_json(message)
+                    except WebSocketDisconnect:
+                        self.disconnect(user_id)
 
 
 manager = ConnectionManager()
@@ -305,19 +310,34 @@ async def post_message(room_id: str, message: dict, current_user: dict = Depends
     if not check_room_access(room_id, user_id):
         raise HTTPException(status_code=403, detail="Access denied")
     
-    # Enforce sender and timestamp as server understands them
-    message["sender"] = user_id
-    message["timestamp"] = datetime.now(timezone.utc).isoformat()
+    # Parse content if it's a string
+    if isinstance(message.get('content'), str):
+        try:
+            message['content'] = json.loads(message['content'])
+        except json.JSONDecodeError:
+            pass  # Keep as string if not valid JSON
+
+    # Enforce server-controlled fields
+    message.update({
+        "sender": user_id,
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "roomId": room_id  # Ensure roomId is included for WebSocket routing
+    })
     
     # Store message in Redis list (persistent storage)
     message_key = f"room:{room_id}:messages"
     redis_client.lpush(message_key, json.dumps(message))
     
     # Publish to Redis pubsub for real-time delivery
-    redis_client.publish(get_pubsub_key(room_id), json.dumps(message))
+    pubsub_key = get_pubsub_key(room_id)
+    message_json = json.dumps(message)
+    print(f"Publishing message to Redis channel {pubsub_key}: {message_json}")
+    redis_client.publish(pubsub_key, message_json)
     
     # Broadcast to all WebSocket connections in this room
+    print(f"Broadcasting to WebSocket connections for room {room_id}")
     await manager.broadcast(room_id, message)
+    print("Broadcast complete")
     return {"status": "message sent"}
 
 @app.put("/rooms/{room_id}")
@@ -436,8 +456,9 @@ async def invite_user(room_id: str, user_id: str, current_user: dict = Depends(g
     return {"status": "user invited"}
 
 
-@app.websocket("/ws/rooms/{room_id}")
-async def websocket_endpoint(websocket: WebSocket, room_id: str):
+@app.websocket("/ws") 
+async def websocket_endpoint(websocket: WebSocket):
+    print("WebSocket connection established")
     client_id = None
 
     # First send accept before any other messages
@@ -451,27 +472,24 @@ async def websocket_endpoint(websocket: WebSocket, room_id: str):
         
     payload = await keycloak.verify_token(data["token"])
     client_id = payload.get("sub")
-    if not check_room_access(room_id, client_id):
-        await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
-        return
         
-    await manager.connect(websocket, client_id, room_id)
+    await manager.connect(websocket, client_id)
     await websocket.send_json({
-        "type": "auth-success",
+        "type": "auth-success", 
         "message": "Authentication successful"
     })
 
     while True:
-        data = await websocket.receive_json()
         try:
-            await post_message(room_id, data, payload)
-        except Exception as e:
-            print(f"Error processing message: {e}")
-                
-# Redis setup
-redis_client = redis.Redis(host='redis_messaging', port=6379, db=0, password=REDIS_PASSWORD)
+            data = await websocket.receive_json()
+            if data.get("type") == "disconnect":
+                await manager.disconnect(client_id)
+                await websocket.close()
+                return
+        except WebSocketDisconnect:
+            await manager.disconnect(client_id)
+            return
 
-
-if __name__ == "__main__":
+if __name__ == "__main__": 
     import uvicorn
     uvicorn.run("users_api:app", host="0.0.0.0", port=8000, reload=True)

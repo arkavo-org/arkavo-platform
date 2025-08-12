@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
+import { useWebSocket } from "../context/WebSocketContext";
 import "../css/global.css";
 import "../css/ChatPage.css";
 import Room from "./Room";
@@ -182,7 +183,7 @@ const ChatPage: React.FC<ChatPageProps> = () => {
           </div>
         )}
       </div>
-    </div>
+      </div>
   );
 };
 

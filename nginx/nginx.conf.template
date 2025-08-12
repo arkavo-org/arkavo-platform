@@ -267,7 +267,7 @@ http {
         ssl_certificate /keys/fullchain.pem;
         ssl_certificate_key /keys/privkey.pem;
 
-        location /ws/messages {
+        location /ws {
             set $NGINX_USERS_UPSTREAM "users";
             proxy_pass http://$NGINX_USERS_UPSTREAM:8000;
             

@@ -1,7 +1,13 @@
 import React, { useState, useEffect, useRef, useCallback } from "react";
+import { 
+  saveMessagesToDB, 
+  getMessagesFromDB, 
+  clearMessagesForRoom 
+} from "./indexedDBUtils";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import { faInfoCircle } from "@fortawesome/free-solid-svg-icons";
 import { useAuth } from "../context/AuthContext";
+import { useWebSocket } from "../context/WebSocketContext";
 import type { NanoTDFDatasetClient } from "@opentdf/sdk";
 import RoomModal from "./RoomModal";
 import "../css/ChatPage.css";
@@ -42,6 +48,13 @@ const Room: React.FC<RoomProps> = ({ roomId }) => {
       setMessages([]);
       fetchMessages(); // now tdfClient is guaranteed available
     }
+
+    return () => {
+      // Cleanup when room changes
+      if (roomId) {
+        clearMessagesForRoom(roomId);
+      }
+    };
   }, [roomId, tdfStatus]);
 
   const fetchProfile = useCallback(
@@ -84,7 +97,8 @@ const Room: React.FC<RoomProps> = ({ roomId }) => {
     [keycloak, profiles]
   );
   const [expandedImage, setExpandedImage] = useState<string | null>(null);
-  const [ws, setWs] = useState<WebSocket | null>(null);
+  // WebSocket connection is now managed at ChatPage level
+  const { ws } = useWebSocket();
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   const decryptTDFMessage = async (content: any) => {
@@ -116,115 +130,59 @@ const Room: React.FC<RoomProps> = ({ roomId }) => {
     return JSON.parse(decoder.decode(decrypted));
   };
 
-  const decryptTDFMessages = async (messages: any[]) => {
-    const processedMessages = [];
-    
-    for (const message of messages) {
-      try {
-        let content;
-        let encrypted = false;
-
-        if (message.content?.startsWith("TDFMES")) {
-          encrypted = true;
-          content = await decryptTDFMessage(message.content);
-        } else {
-          content = typeof message.content === 'string' 
-            ? JSON.parse(message.content)
-            : message.content;
-        }
-
-        processedMessages.push({
-          ...message,
-          encrypted,
-          content,
-        });
-      } catch (error) {
-        console.error("Error processing message:", error);
-        processedMessages.push({
-          ...message,
-          encrypted: false,
-          content: { text: "[Error processing message]" }
-        });
+  const processMessage = async (message: any) => {
+    try {
+      // Handle both string and object content
+      const contentStr = typeof message.content === 'string' ? message.content : JSON.stringify(message.content);
+      
+      let content;
+      let encrypted = false;
+      
+      if (contentStr.startsWith("TDFMES")) {
+        encrypted = true;
+        content = await decryptTDFMessage(contentStr);
+      } else {
+        content = typeof message.content === 'string' 
+          ? JSON.parse(message.content)
+          : message.content;
       }
-    }
 
-    return processedMessages;
+      const processedMessage = {
+        ...message,
+        encrypted,
+        content,
+        attachments: message.attachments?.map((att: any) => ({
+          ...att,
+          dataUrl: `data:${att.mimeType};base64,${att.data}`,
+        })),
+      };
+
+      return processedMessage;
+    } catch (error) {
+      console.error("Error processing message:", error);
+      return {
+        ...message,
+        encrypted: false,
+        content: { text: "[Error processing message]" }
+      };
+    }
   };
 
-  // Handle WebSocket connection when roomId changes, keycloak authentication status changes, or TDF becomes ready
+  // Handle incoming messages from the shared WebSocket connection
   useEffect(() => {
-    if (!keycloak?.authenticated || tdfStatus !== "ready") {
-      // Close any existing connection if requirements aren't met
-      if (ws) {
-        ws.close();
-        setWs(null);
-      }
-      return;
-    }
+    if (!ws) return;
 
-    const wss_url = `${import.meta.env.VITE_USERS_WSS_URL}/ws/rooms/${roomId}`;
-    console.log(`Attempting WebSocket connection to: ${wss_url}`);
-    const socket = new WebSocket(wss_url);
-
-    const handleAuth = async () => {
-      try {
-        if (keycloak?.isTokenExpired()) {
-          await keycloak.updateToken(30);
-        }
-
-        const token = keycloak?.token;
-        if (!token) {
-          console.error("No token available for WebSocket auth");
-          socket.close();
-          return;
-        }
-
-        console.log(`WebSocket connection established to ${wss_url}`);
-        socket.send(
-          JSON.stringify({
-            type: "auth",
-            token: token,
-          })
-        );
-      } catch (error) {
-        console.error("Error during WebSocket auth:", error);
-        socket.close();
-      }
-    };
-
-    socket.onopen = handleAuth;
-    socket.onerror = (error) => console.error("WebSocket error:", error);
-    socket.onclose = (event) =>
-      console.log(`WebSocket closed: ${event.code} - ${event.reason}`);
-
-    socket.onmessage = async (event) => {
+    const handleMessage = async (event: MessageEvent) => {
       try {
         const message = JSON.parse(event.data);
-        console.log("Received message:", message);
+        if (message.roomId !== roomId) return;
 
-        if (message.type === "auth-failure") {
-          console.error("WebSocket auth failed:", message.message);
-          return;
-        }
-        const decryptedMessages = await decryptTDFMessages([message]);
-        const decryptedMessage = decryptedMessages[0];
-
-        if (decryptedMessage.sender && decryptedMessage.timestamp) {
-          // Convert any attachments to data URLs for immediate display
-          let processedMessage = {
-            ...message,
-            attachments: message.attachments?.map((att: any) => ({
-              ...att,
-              dataUrl: `data:${att.mimeType};base64,${att.data}`,
-            })),
-          };
-
+        const processedMessage = await processMessage(message);
+        if (processedMessage.sender && processedMessage.timestamp) {
           setMessages((prev) => [...prev, processedMessage]);
-          if (typeof message.sender === "string") {
-            // Always use the message sender's ID
-            if (!profiles[message.sender]) {
-              fetchProfile(message.sender);
-            }
+          await saveMessagesToDB(roomId, [processedMessage]);
+          if (typeof processedMessage.sender === "string" && !profiles[processedMessage.sender]) {
+            fetchProfile(processedMessage.sender);
           }
         }
       } catch (error) {
@@ -232,12 +190,11 @@ const Room: React.FC<RoomProps> = ({ roomId }) => {
       }
     };
 
-    setWs(socket);
-
+    ws.addEventListener('message', handleMessage);
     return () => {
-      socket.close();
+      ws.removeEventListener('message', handleMessage);
     };
-  }, [roomId, keycloak?.authenticated]);
+  }, [ws, roomId, profiles, fetchProfile]);
 
   // Update WebSocket auth when token changes
   useEffect(() => {
@@ -253,6 +210,12 @@ const Room: React.FC<RoomProps> = ({ roomId }) => {
 
   const fetchMessages = async () => {
     if (!keycloak?.authenticated) return;
+
+    // First try to get messages from IndexedDB
+    const cachedMessages = await getMessagesFromDB(roomId);
+    if (cachedMessages.length > 0) {
+      setMessages(cachedMessages);
+    }
 
     const url = `${
       import.meta.env.VITE_USERS_API_URL
@@ -287,10 +250,12 @@ const Room: React.FC<RoomProps> = ({ roomId }) => {
       }
 
       const data = await response.json();
-      console.log("Fetched messages:", data.messages);
-      const processedMessages = await decryptTDFMessages(data.messages);
-      console.log("Processed messages:", processedMessages);
+      const processedMessages = await Promise.all(
+        data.messages.map(processMessage)
+      );
+      
       setMessages(processedMessages);
+      await saveMessagesToDB(roomId, processedMessages);
 
       // Fetch sender profiles
       const uniqueSenders = [
@@ -610,7 +575,7 @@ const Room: React.FC<RoomProps> = ({ roomId }) => {
         roomInfo ? (
           <MessageInput
             roomId={roomId}
-            onSend={fetchMessages}
+            onSend={() => {}}
             roomInfo={roomInfo}
           />
         ) : (
