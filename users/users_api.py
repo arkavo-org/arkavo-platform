@@ -153,7 +153,7 @@ async def update_user(
     # Ensure UUID is included in the stored data
     user_data['uuid'] = uuid
     
-    # Filter out None values
+    # Filter out None values but keep empty strings
     filtered_data = {k: v for k, v in user_data.items() if v is not None}
     
     # Update or create the profile

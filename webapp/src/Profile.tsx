@@ -102,44 +102,17 @@ const Profile: React.FC<ProfileProps> = ({ isModal = false, onClose = () => {} }
     reader.readAsDataURL(file);
   };
 
-  const handleSaveCroppedImage = async (croppedImage: string) => {
-    if (!keycloak?.token) return;
-    
+  const handleSaveCroppedImage = async (base64Image: string) => {
     try {
-      const blob = await fetch(croppedImage).then(r => r.blob());
-      const formData = new FormData();
-      formData.append('picture', blob);
-
-      await keycloak.updateToken(30);
-      if (!keycloak.token) {
-        throw new Error("No access token available");
-      }
-
-      const response = await fetch(
-        `${import.meta.env.VITE_USERS_API_URL}/users/picture`,
-        {
-          method: 'POST',
-          headers: {
-            Authorization: `Bearer ${keycloak.token}`,
-          },
-          body: formData,
-        }
-      );
-
-      if (!response.ok) {
-        throw new Error('Failed to upload image');
-      }
-
-      const data = await response.json();
       if (profileData) {
-        setProfileData({...profileData, picture: data.picture});
+        setProfileData({...profileData, picture: base64Image});
         localStorage.setItem("userProfile", JSON.stringify({
           ...profileData,
-          picture: data.picture
+          picture: base64Image
         }));
       }
     } catch (err) {
-      console.error('Error uploading image:', err);
+      console.error('Error saving image:', err);
     } finally {
       setShowImageEditor(false);
     }
@@ -183,6 +156,7 @@ const Profile: React.FC<ProfileProps> = ({ isModal = false, onClose = () => {} }
           body: JSON.stringify({
             ...formData,
             email: keycloak.tokenParsed?.email || "",
+            picture: profileData?.picture || ""
           }),
         }
       );
@@ -190,6 +164,7 @@ const Profile: React.FC<ProfileProps> = ({ isModal = false, onClose = () => {} }
       if (!response.ok) {
         throw new Error("Failed to save profile");
       }
+      onClose(); // Close modal after successful save
     } catch (err) {
       console.error("Error saving profile:", err);
     }

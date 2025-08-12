@@ -54,27 +54,10 @@ const Navbar: React.FC<NavbarProps> = ({ onProfileClick }) => {
         {isAuthenticated && userProfile ? (
           <div className="profile-elements">
             <FontAwesomeIcon
-              icon={faPlusCircle}
-              className="icon plus-icon"
-              title="Create"
-              onClick={() => navigate("/create")}
-            />
-            <FontAwesomeIcon
-              icon={faLock}
-              className="icon lock-icon"
-              title="TDF"
-              onClick={() => navigate("/tdf")}
-            />
-            <FontAwesomeIcon
               icon={faCalendar}
               className="icon events-icon"
               title="Events"
               onClick={() => navigate("/events")}
-            />
-            <FontAwesomeIcon
-              icon={faBell}
-              className="icon notification-icon"
-              title="Notifications"
             />
             <FontAwesomeIcon
               icon={faEnvelope}

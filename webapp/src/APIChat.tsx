@@ -1,5 +1,4 @@
 import React, { useState, useEffect, useRef, KeyboardEvent } from 'react';
-import './css/Chat.css';
 
 interface Message {
     sender: string;

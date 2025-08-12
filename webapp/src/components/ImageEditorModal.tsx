@@ -23,7 +23,9 @@ const ImageEditorModal: React.FC<ImageEditorModalProps> = ({ image, onClose, onS
     if (!croppedAreaPixels) return;
     try {
       const croppedImage = await getCroppedImg(localImage, croppedAreaPixels, rotation);
-      onSave(croppedImage);
+      // Extract just the base64 part of the data URL
+      const base64Data = croppedImage.split(',')[1];
+      onSave(base64Data);
     } catch (err) {
       console.error('Error cropping image:', err);
     }
@@ -113,7 +115,7 @@ const ImageEditorModal: React.FC<ImageEditorModalProps> = ({ image, onClose, onS
               Cancel
             </button>
             <button className="save-btn" onClick={handleSave}>
-              Save & Upload
+              Save
             </button>
           </div>
         </div>

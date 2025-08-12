@@ -451,9 +451,6 @@ const Room: React.FC<RoomProps> = ({ roomId }) => {
 
   return (
     <div className="chat-area">
-      <button onClick={handleRoomInfoClick} className="room-info-button">
-        <FontAwesomeIcon icon={faInfoCircle} />
-      </button>
       {expandedImage && (
         <div
           className="image-expanded-overlay"
@@ -489,6 +486,9 @@ const Room: React.FC<RoomProps> = ({ roomId }) => {
       )}
 
       <div className="message-area">
+        <button onClick={handleRoomInfoClick} className="room-info-button">
+          <FontAwesomeIcon icon={faInfoCircle} />
+        </button>
         {messages
           .sort(
             (a, b) =>

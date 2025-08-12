@@ -38,15 +38,15 @@ http {
 
         location / {
             root /app;
+            try_files $uri $uri/ /index.html;
+            
+            # Disable caching for index.html
+            location = /index.html {
+                add_header Cache-Control "no-store, no-cache, must-revalidate";
+                add_header Pragma "no-cache";
+                add_header Expires "0";
+            }
         }
-
-        # This seperate location is so the no cache policy only applies to the index and nothing else.
-        #location @index {
-        #    root /app;
-        #    add_header Cache-Control no-cache;
-        #    expires 0;
-        #    try_files /index.html /index.html;
-        #}
     }
 
 
@@ -770,4 +770,3 @@ http {
     }
 
 }
-

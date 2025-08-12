@@ -17,7 +17,9 @@ interface Room {
   is_public: boolean;
 }
 
-interface ChatPageProps {}
+interface ChatPageProps {
+  roomId?: string; // Optional to support both prop and URL param usage
+}
 
 const ChatPage: React.FC<ChatPageProps> = () => {
   const navigate = useNavigate();
