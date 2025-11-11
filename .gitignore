@@ -258,3 +258,5 @@ webapp/src/assets/logo.png
 ollama
 libretranslate/*
 keycloak/theme/login/template.ftl
+certs/renewcert.sh
+keycloak/theme/login/resources/css/styles.css
