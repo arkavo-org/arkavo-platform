@@ -6,8 +6,8 @@ certbot certonly \
   --non-interactive \
   --agree-tos \
   --email julian@codecollective.us \
-  -d app.codecollective \
-  -d *.app.codecollective
+  -d app.arkavo \
+  -d *.app.arkavo
 
 cp certs/config/live/codecollective.us/*.pem .
 

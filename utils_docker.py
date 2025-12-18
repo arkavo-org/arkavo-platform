@@ -310,24 +310,57 @@ def wait_for_url(url, network):
     stop_container("url_test")
     run_container(
         dict(
-            image="curlimages/curl:latest",  # Use the curl-specific image
+            image="curlimages/curl:8.4.0",  # A stable, well-known curl image
             name="url_test",
             network=network,
-            #network_mode="host",  # Set the network mode to host
             environment={"TEST_URL": url},
             command=[
                 "sh",
                 "-c",
                 """
-            while ! curl -k $TEST_URL; do
-                echo 'Waiting for Keycloak at' $TEST_URL
+            while ! curl -fsS -k --connect-timeout 5 "$TEST_URL"; do
+                echo 'Waiting for service at' $TEST_URL
                 sleep 2
             done
-            echo 'Keycloak is up!'
+            echo 'Service is up!'
             """,
             ],
             detach=False,
             remove=True,  # Automatically clean up the container after it stops
+        )
+    )
+
+def wait_for_port(host, port, network, retries=60, delay=2):
+    """Wait until a TCP port on a container becomes reachable."""
+    stop_container("port_test")
+    run_container(
+        dict(
+            image="busybox:latest",
+            name="port_test",
+            network=network,
+            environment={"TARGET_HOST": host, "TARGET_PORT": str(port)},
+            command=[
+                "sh",
+                "-c",
+                textwrap.dedent(
+                    f"""
+                i=0
+                while [ $i -lt {retries} ]; do
+                    if nc -z -w 2 $TARGET_HOST $TARGET_PORT; then
+                        echo "Service $TARGET_HOST:$TARGET_PORT is reachable"
+                        exit 0
+                    fi
+                    echo "Waiting for service at $TARGET_HOST:$TARGET_PORT"
+                    i=$((i+1))
+                    sleep {delay}
+                done
+                echo "Timed out waiting for $TARGET_HOST:$TARGET_PORT"
+                exit 1
+                """
+                ),
+            ],
+            detach=False,
+            remove=True,
         )
     )
 

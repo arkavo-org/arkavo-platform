@@ -17,6 +17,7 @@ SERVICES_TO_RUN = [
     "opentdf",     # E2EE Solution
     "AICouncil",   # Agentic Solution in Python
     "nginx",       # Reverse proxy for Reactor and SSH
+    "nextcloud",   # Files app (Nextcloud stack)
     #"ollama",      # LLM Host
     #"sglang",      # LLM Host
     #"bluesky",     # Social Media - PDS for Bluesky
@@ -58,3 +59,8 @@ EXTRACT_FOLDER = "<YOUR SECRET HERE>"  # Name of the folder after extraction
 BLUESKY_HANDLE = "<YOUR SECRET HERE>"
 BLUESKY_PASSWORD = "<YOUR SECRET HERE>"
 REDIS_PASSWORD = "PamdRkw5Bg5ae73"
+
+nextcloud_data_root = os.path.join(current_dir, "data")
+nextcloud_base_dir = os.path.join(nextcloud_data_root, "nextcloud")
+
+certbot_ssl_home = "/etc/letsencrypt/live/arkavo.org-0001/"

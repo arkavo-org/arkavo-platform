@@ -3,6 +3,10 @@ events {}
 http {
     resolver 127.0.0.11 valid=30s;
 
+    upstream nextcloud_php_handler {
+        server nextcloud-app:9000;
+    }
+
     server {
         listen 80;
         server_name $USER_WEBSITE;
@@ -17,12 +21,14 @@ http {
 
         ssl_certificate /keys/fullchain.pem;
         ssl_certificate_key /keys/privkey.pem;
+        include /etc/nginx/ssl_params.conf;
 
         return 404;  # Return 404 for undefined subdomains
     }
 
     server {
-        listen 443;
+        listen 443 ssl;
+        http2 on;
         server_name $USER_WEBSITE;
 
         include /etc/nginx/mime.types;
@@ -47,6 +53,112 @@ http {
                 add_header Expires "0";
             }
         }
+    }
+
+    server {
+        listen 443 ssl;
+        http2 on;
+        server_name $NEXTCLOUD_BASE_URL;
+
+        root /nextcloud/html;
+        index index.php index.html;
+
+        ssl_certificate /keys/fullchain.pem;
+        ssl_certificate_key /keys/privkey.pem;
+
+        client_max_body_size 10240m;
+        fastcgi_buffers 64 4K;
+
+        add_header Referrer-Policy "no-referrer" always;
+        add_header X-Content-Type-Options "nosniff" always;
+        add_header X-Download-Options "noopen" always;
+        add_header X-Frame-Options "SAMEORIGIN" always;
+        add_header X-Permitted-Cross-Domain-Policies "none" always;
+        add_header X-Robots-Tag "none" always;
+        add_header X-XSS-Protection "1; mode=block" always;
+
+        location = /.well-known/carddav { return 301 /remote.php/dav; }
+        location = /.well-known/caldav { return 301 /remote.php/dav; }
+        location = /.well-known/webfinger { return 301 /index.php/.well-known/webfinger; }
+        location = /.well-known/nodeinfo { return 301 /index.php/.well-known/nodeinfo; }
+
+        location = /robots.txt {
+            allow all;
+            log_not_found off;
+            access_log off;
+        }
+
+        autoindex off;
+
+        location / {
+            try_files $uri /index.php$request_uri;
+        }
+
+        location ~ ^/(?:build|tests|config|lib|3rdparty|templates|data)/ {
+            deny all;
+        }
+        location ~ ^/(?:\.|autotest|occ|issue|indie|db_|console) {
+            deny all;
+        }
+
+        location ~ ^/index\.php/(.*\.mjs)$ {
+            types { application/javascript mjs; }
+            try_files /$1 =404;
+            expires 6M;
+            access_log off;
+        }
+
+        location = /index.php {
+            fastcgi_split_path_info ^(.+\.php)(/.+)$;
+            include fastcgi_params;
+            fastcgi_param SCRIPT_FILENAME $document_root$fastcgi_script_name;
+            fastcgi_param PATH_INFO $fastcgi_path_info;
+            fastcgi_param modHeadersAvailable true;
+            fastcgi_param front_controller_active true;
+            fastcgi_pass nextcloud_php_handler;
+            fastcgi_intercept_errors on;
+            fastcgi_request_buffering off;
+            fastcgi_read_timeout 360s;
+        }
+
+        location ~ \.php(?:$|/) {
+            fastcgi_split_path_info ^(.+?\.php)(/.*)$;
+            include fastcgi_params;
+            fastcgi_param SCRIPT_FILENAME $document_root$fastcgi_script_name;
+            fastcgi_param PATH_INFO $fastcgi_path_info;
+            fastcgi_param modHeadersAvailable true;
+            fastcgi_param front_controller_active true;
+            fastcgi_pass nextcloud_php_handler;
+            fastcgi_intercept_errors on;
+            fastcgi_request_buffering off;
+            fastcgi_read_timeout 360s;
+        }
+
+        location ~ \.mjs$ {
+            types { application/javascript mjs; }
+            try_files $uri /index.php$request_uri;
+            expires 6M;
+            access_log off;
+        }
+
+        location ~ \.(?:css|js|woff2?|svg|gif|map)$ {
+            try_files $uri /index.php$request_uri;
+            expires 6M;
+            access_log off;
+        }
+
+        location ~ \.(?:png|html|ttf|ico|jpg|jpeg|bcmap)$ {
+            try_files $uri /index.php$request_uri;
+            expires 1M;
+            access_log off;
+        }
+
+        location ~ ^/(\.|autotest|occ|issue|indie|db_|console) {
+            deny all;
+        }
+
+        error_page 403 /core/templates/403.php;
+        error_page 404 /core/templates/404.php;
     }
 
 
@@ -674,29 +786,22 @@ http {
 
         ssl_certificate /keys/fullchain.pem;
         ssl_certificate_key /keys/privkey.pem;
+        include /etc/nginx/ssl_params.conf;
 
  
         location / {
             set $NGINX_KEYCLOAK_UPSTREAM "keycloak";
 
-            # Proxy to Keycloak
-            proxy_pass https://$NGINX_KEYCLOAK_UPSTREAM:8443;
+            # Proxy to Keycloak over plain HTTP within the private Docker network.
+            # Public traffic remains encrypted between the client and NGINX.
+            proxy_pass http://$NGINX_KEYCLOAK_UPSTREAM:8080;
 
             # Add headers
             proxy_set_header Host $host;
             proxy_set_header X-Real-IP $remote_addr;
             proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
             proxy_set_header X-Forwarded-Proto $scheme;
-
-            # Increase buffer size
-            proxy_buffer_size 16k;
-            proxy_buffers 4 32k;
-            proxy_busy_buffers_size 64k;
-
-            # SSL Handling
-            proxy_ssl_server_name on;
-            proxy_ssl_verify off;  # Replace with proper CA trust in production
-
+ 
             # Retry logic and timeouts
             proxy_next_upstream error timeout invalid_header http_500 http_502 http_503 http_504;
             proxy_connect_timeout 5s;

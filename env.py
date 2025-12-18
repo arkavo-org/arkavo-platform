@@ -23,8 +23,15 @@ org_dir = os.path.join(current_dir, "org")
 certs_dir = os.path.join(current_dir, "certs")
 keys_dir = os.path.join(certs_dir, "keys")
 synapse_dir = os.path.join(current_dir, "synapse")
-bsky_bridge_dir = os.path.join(current_dir, "bsky_bridge")
+bsky_bridge_dir = os.path.join(current_dir, "bsky-bridge")
 gitea_dir = os.path.join(current_dir, "gitea")
+
+# Nextcloud data directory setup
+os.makedirs(nextcloud_data_root, exist_ok=True)
+os.makedirs(nextcloud_base_dir, exist_ok=True)
+os.makedirs(certs_dir, exist_ok=True)
+if "NEXTCLOUD_FQDN" not in globals():
+    NEXTCLOUD_FQDN = "71.179.48.229"
 # Check to see if we're in an EC2 instance
 ec2_metadata_base_url = "http://169.254.169.254/latest/meta-data/"
 try:
@@ -61,14 +68,15 @@ OPENTDF_BASE_URL = "opentdf." + BACKEND_LOCATION
 ORG_BASE_URL = "org." + BACKEND_LOCATION
 SYNAPSE_BASE_URL = "matrix." + BACKEND_LOCATION
 BLUESKY_BASE_URL = "bluesky." + BACKEND_LOCATION
-BSKY_FYP_BASE_URL = "bsky_fyp." + BACKEND_LOCATION
+BSKY_FYP_BASE_URL = "bsky-fyp." + BACKEND_LOCATION
 ELEMENT_BASE_URL = "element." + BACKEND_LOCATION
-BSKY_BRIDGE_BASE_URL = "bsky_bridge." + BACKEND_LOCATION
+BSKY_BRIDGE_BASE_URL = "bsky-bridge." + BACKEND_LOCATION
 WEBAPP_DEV_BASE_URL = "dev." + USER_WEBSITE
 INITIATIVE_BASE_URL = "initiative." + BACKEND_LOCATION
 GITEA_BASE_URL = "gitea." + BACKEND_LOCATION
 WHISPER_BASE_URL = "whisper." + BACKEND_LOCATION
 USERS_BASE_URL = "users." + BACKEND_LOCATION
+NEXTCLOUD_BASE_URL = "nextcloud." + BACKEND_LOCATION
 
 KEYCLOAK_HOST = "https://" + KEYCLOAK_BASE_URL
 PROTOCOL_OPENTDF_BASE_URL = "https://" + OPENTDF_BASE_URL
@@ -83,7 +91,7 @@ VITE_BLUESKY_HOST = "https://" + BLUESKY_BASE_URL
 VITE_PUBLIC_URL = USER_WEBSITE
 
 # GPU supported services
-DEEPSEEK_JANUS_BASE_URL = "deepseek_janus." + GPU_BACKEND_LOCATION
+DEEPSEEK_JANUS_BASE_URL = "deepseek-janus." + GPU_BACKEND_LOCATION
 OLLAMA_BASE_URL = "ollama." + GPU_BACKEND_LOCATION
 
 # Git Branch Port Config
@@ -296,6 +304,10 @@ nginx = dict(
             "bind": "/etc/nginx/nginx.conf",
             "mode": "rw",
         },
+        os.path.join(nginx_dir, "ssl_params.conf"): {
+            "bind": "/etc/nginx/ssl_params.conf",
+            "mode": "ro",
+        },
         os.path.join(webapp_dir, "dist"): {
             "bind": "/app",
             "mode": "rw",
@@ -308,14 +320,18 @@ nginx = dict(
             "bind": "/worldchat",
             "mode": "rw",
         },
+        os.path.join(nextcloud_base_dir, "html"): {
+            "bind": "/var/www/html",
+            "mode": "ro",
+        },
         
-        os.path.join(certs_dir, "ssl"): {"bind": "/etc/nginx/ssl", "mode": "rw"},
+        os.path.join(certbot_ssl_home, "ssl"): {"bind": "/etc/nginx/ssl", "mode": "rw"},
         os.path.join(certs_dir, "html"): {
             "bind": "/usr/share/nginx/html",
             "mode": "rw",
         },
-        f"{certs_dir}/fullchain.pem": {"bind": "/keys/fullchain.pem", "mode": "rw"},
-        f"{certs_dir}/privkey.pem": {"bind": "/keys/privkey.pem", "mode": "rw"},
+        f"{certbot_ssl_home}/fullchain.pem": {"bind": "/keys/fullchain.pem", "mode": "rw"},
+        f"{certbot_ssl_home}/privkey.pem": {"bind": "/keys/privkey.pem", "mode": "rw"},
     },
     ports={
         "80/tcp": 80,  # equivalent to -p 80:80
@@ -588,7 +604,7 @@ bluesky_bridge = dict(
 )
 
 bsky_fyp = copy.copy(bluesky_bridge)
-bsky_fyp["name"] = "bsky_fyp"
+bsky_fyp["name"] = "bsky-fyp"
 bsky_fyp["command"] = [
     "sh",
     "-c",
@@ -760,7 +776,7 @@ users_api = dict(
     volumes={
         os.path.join(current_dir, "users"): {"bind": "/app", "mode": "rw"},  # Named volume with bind info
     },
-    network="codecollective",
+    network=NETWORK_NAME,
     restart_policy={"Name": "always"},
     detach=True,
     command=["python", "/app/users_api.py"],
@@ -787,3 +803,63 @@ redis = dict(
 # to get rid of memory warning:
 # on the host, run:
 # echo 'vm.overcommit_memory = 1' | sudo tee -a /etc/sysctl.conf
+
+# Nextcloud stack --------------------------------------------------
+nextcloud_db = dict(
+    name="nextcloud-db",
+    image="postgres:16-alpine",
+    detach=True,
+    network=NETWORK_NAME,
+    restart_policy={"Name": "unless-stopped"},
+    environment={
+        "POSTGRES_DB": "nextcloud",
+        "POSTGRES_USER": "nextcloud",
+        "POSTGRES_PASSWORD": "super-secret-db-password",
+    },
+    volumes={
+        os.path.join(nextcloud_base_dir, "db"): {
+            "bind": "/var/lib/postgresql/data",
+            "mode": "rw",
+        }
+    },
+)
+
+nextcloud_redis = dict(
+    name="nextcloud-redis",
+    image="redis:7-alpine",
+    detach=True,
+    network=NETWORK_NAME,
+    restart_policy={"Name": "unless-stopped"},
+    command=["redis-server", "--appendonly", "yes"],
+    volumes={
+        os.path.join(nextcloud_base_dir, "redis"): {
+            "bind": "/data",
+            "mode": "rw",
+        }
+    },
+)
+
+nextcloud_app = dict(
+    name="nextcloud-app",
+    image="nextcloud:stable-fpm",
+    detach=True,
+    network=NETWORK_NAME,
+    restart_policy={"Name": "unless-stopped"},
+    environment={
+        "POSTGRES_DB": "nextcloud",
+        "POSTGRES_USER": "nextcloud",
+        "POSTGRES_PASSWORD": "super-secret-db-password",
+        "POSTGRES_HOST": "nextcloud-db",
+        "REDIS_HOST": "nextcloud-redis",
+        "NEXTCLOUD_TRUSTED_DOMAINS": NEXTCLOUD_FQDN,
+        "OVERWRITEHOST": NEXTCLOUD_FQDN,
+        "OVERWRITEPROTOCOL": "https",
+    },
+    volumes={
+        os.path.join(nextcloud_base_dir, "html"): {"bind": "/var/www/html", "mode": "rw"},
+        os.path.join(nextcloud_base_dir, "data"): {
+            "bind": "/var/www/html/data",
+            "mode": "rw",
+        },
+    },
+)

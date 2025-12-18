@@ -1,14 +1,14 @@
-import os
-import shutil
-import sys
-import util
-import time
-import os
-import sys
-import utils_docker
 import json
+import os
+import subprocess
+import sys
+import time
+
+import util
+import utils_docker
 
 here = os.path.abspath(os.path.dirname(__file__))
+
 
 # create env.py file if this is the first run
 util.initializeFiles()
@@ -21,7 +21,69 @@ print("Applying env var substitutions in hard-coded .template files")
 util.substitutions(here, env)
 util.writeViteEnv(vars(env))
 
-import subprocess
+EXTRA_HOST_TARGET = os.getenv("ARKAVO_EXTRA_HOST_TARGET", "host-gateway")
+GATEWAY_ALIAS = os.getenv("ARKAVO_GATEWAY_ALIAS", "host.docker.internal")
+
+
+def _collect_public_hostnames(env_module) -> list[str]:
+    hostnames = set()
+    for key, value in vars(env_module).items():
+        if not isinstance(value, str):
+            continue
+        if "://" in value:
+            continue
+        if key.endswith("_BASE_URL"):
+            hostnames.add(value)
+    for attr in ("USER_WEBSITE", "BACKEND_LOCATION"):
+        value = getattr(env_module, attr, None)
+        if isinstance(value, str) and value:
+            hostnames.add(value)
+    hostnames.add(GATEWAY_ALIAS)
+    return sorted(hostnames)
+
+
+def configure_container_extra_hosts(env_module) -> None:
+    hostnames = _collect_public_hostnames(env_module)
+    if not hostnames:
+        print("No hostnames discovered for container extra_hosts override")
+        return
+
+    for value in vars(env_module).values():
+        if not isinstance(value, dict):
+            continue
+        if "name" not in value or "image" not in value:
+            continue
+        extra_hosts = value.setdefault("extra_hosts", {})
+        changed = False
+        for hostname in hostnames:
+            if hostname in extra_hosts:
+                continue
+            extra_hosts[hostname] = EXTRA_HOST_TARGET
+            changed = True
+        if changed:
+            print(f"Added extra_hosts overrides for {value.get('name')}")
+
+
+configure_container_extra_hosts(env)
+
+
+def ensure_users_api_image(image_name: str) -> None:
+    """Build the users-api Docker image if it is missing."""
+    print(f"Checking for Docker image '{image_name}'")
+    inspect = subprocess.run(
+        ["docker", "image", "inspect", image_name],
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+    )
+    if inspect.returncode == 0:
+        print(f"Docker image '{image_name}' already exists")
+        return
+
+    print(f"Docker image '{image_name}' not found. Building from users/Dockerfile...")
+    subprocess.check_call(
+        ["docker", "build", "-t", image_name, "."], cwd=os.path.join(here, "users")
+    )
+
 # Check if the keys directory exists, if not, generate temporary keys for localhost or production keys
 if not os.path.isdir(env.keys_dir):
     if env.USER_WEBSITE == "localhost":
@@ -54,7 +116,6 @@ if "keycloak" in env.SERVICES_TO_RUN:
     utils_docker.wait_for_db(network=env.NETWORK_NAME, db_url="keycloakdb:5432")
     utils_docker.run_container(env.keycloak)
 
-sys.stdout.flush()  # Force flush in CI environments
 
 # --- WEB APP ---
 # theoretically has no dependencies
@@ -63,7 +124,13 @@ if "webapp" in env.SERVICES_TO_RUN:
 if "webapp_build" in env.SERVICES_TO_RUN:
     utils_docker.run_container(env.webapp_build)
 
-sys.stdout.flush()  # Force flush in CI environments
+if "nextcloud" in env.SERVICES_TO_RUN:
+    print("Running Nextcloud stack")
+    utils_docker.run_container(env.nextcloud_db)
+    utils_docker.wait_for_db(network=env.NETWORK_NAME, db_url="nextcloud-db:5432")
+    utils_docker.run_container(env.nextcloud_redis)
+    utils_docker.run_container(env.nextcloud_app)
+    utils_docker.wait_for_port("nextcloud-app", 9000, network=env.NETWORK_NAME)
     
 # --- NGINX ---
 if "nginx" in env.SERVICES_TO_RUN:
@@ -75,23 +142,30 @@ if "nginx" in env.SERVICES_TO_RUN:
             #utils_docker.generateProdKeys(outdir=env.certs_dir, website=env.USER_WEBSITE)
     utils_docker.run_container(env.nginx)
 
-sys.stdout.flush()  # Force flush in CI environments
     
 # --- OPENTDF ---
 if "opentdf" in env.SERVICES_TO_RUN:
+    opentdf_container_running = False
+    try:
+        container = utils_docker.DOCKER_CLIENT.containers.get(env.opentdf["name"])
+        opentdf_container_running = container.status == "running"
+    except Exception:
+        # Container doesn't exist or Docker isn't reporting it as running yet
+        pass
     utils_docker.run_container(env.opentdfdb)
     utils_docker.wait_for_db(network=env.NETWORK_NAME, db_url="opentdfdb:5432")
-    print(f"Waiting for {env.KEYCLOAK_INTERNAL_AUTH_URL}")
-    utils_docker.wait_for_url(env.KEYCLOAK_INTERNAL_AUTH_URL, network=env.NETWORK_NAME)
+    if not opentdf_container_running and False:
+        print(f"Waiting for {env.KEYCLOAK_INTERNAL_AUTH_URL}")
+        utils_docker.wait_for_url(
+            env.KEYCLOAK_INTERNAL_AUTH_URL, network=env.NETWORK_NAME
+        )
     utils_docker.run_container(env.opentdf)
 
-sys.stdout.flush()  # Force flush in CI environments
     
 # --- ORG ---
 if "org" in env.SERVICES_TO_RUN:
     utils_docker.run_container(env.org)
 
-sys.stdout.flush()  # Force flush in CI environments
     
 # --- MATRIX SYNAPSE ---
 if "synapse" in env.SERVICES_TO_RUN:
@@ -99,13 +173,11 @@ if "synapse" in env.SERVICES_TO_RUN:
     utils_docker.wait_for_db(network=env.NETWORK_NAME, db_url="synapsedb:5432")
     utils_docker.run_container(env.synapse)
 
-sys.stdout.flush()  # Force flush in CI environments
     
 if "element" in env.SERVICES_TO_RUN:
     # --- Element web app ---
     utils_docker.run_container(env.element)
 
-sys.stdout.flush()  # Force flush in CI environments
     
 # --- OLLAMA !!! ---
 if "ollama" in env.SERVICES_TO_RUN:
@@ -115,7 +187,6 @@ if "ollama" in env.SERVICES_TO_RUN:
 if "deepseekjanus" in env.SERVICES_TO_RUN:
     utils_docker.run_container(env.deepseek_janus)
 
-sys.stdout.flush()  # Force flush in CI environments
     
 # --- BLUESKY PDS --- 
 if "bluesky" in env.SERVICES_TO_RUN:
@@ -123,7 +194,6 @@ if "bluesky" in env.SERVICES_TO_RUN:
     utils_docker.run_container(env.bluesky_bridge)
     utils_docker.run_container(env.bsky_fyp)
 
-sys.stdout.flush()  # Force flush in CI environments
     
 if "sglang" in env.SERVICES_TO_RUN:
     utils_docker.run_container(env.sglang)
@@ -144,10 +214,10 @@ if "libretranslate" in env.SERVICES_TO_RUN:
     utils_docker.run_container(env.libretranslate)
 
 if "users" in env.SERVICES_TO_RUN:
+    ensure_users_api_image(env.users_api.get("image", "users-api"))
     utils_docker.run_container(env.usersdb)
     utils_docker.run_container(env.redis)
     utils_docker.run_container(env.users_api)
 
 
-sys.stdout.flush()  # Force flush in CI environments
     
