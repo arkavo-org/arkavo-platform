@@ -98,7 +98,16 @@ const Room: React.FC<RoomProps> = ({ roomId }) => {
   );
   const [expandedImage, setExpandedImage] = useState<string | null>(null);
   // WebSocket connection is now managed at ChatPage level
-  const { ws } = useWebSocket();
+  const { ws, connectionStatus } = useWebSocket();
+  const connectionStatusText: Record<
+    'connecting' | 'connected' | 'disconnected' | 'error',
+    string
+  > = {
+    connecting: "Connecting...",
+    connected: "Connected",
+    disconnected: "Disconnected",
+    error: "Connection Error",
+  };
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   const decryptTDFMessage = async (content: any) => {
@@ -132,19 +141,23 @@ const Room: React.FC<RoomProps> = ({ roomId }) => {
 
   const processMessage = async (message: any) => {
     try {
-      // Handle both string and object content
-      const contentStr = typeof message.content === 'string' ? message.content : JSON.stringify(message.content);
-      
       let content;
       let encrypted = false;
-      
-      if (contentStr.startsWith("TDFMES")) {
-        encrypted = true;
-        content = await decryptTDFMessage(contentStr);
+
+      if (typeof message.content === "string") {
+        const trimmedContent = message.content.trim();
+        if (trimmedContent.startsWith("TDF")) {
+          encrypted = true;
+          content = await decryptTDFMessage(trimmedContent);
+        } else {
+          try {
+            content = JSON.parse(trimmedContent);
+          } catch {
+            content = { text: trimmedContent };
+          }
+        }
       } else {
-        content = typeof message.content === 'string' 
-          ? JSON.parse(message.content)
-          : message.content;
+        content = message.content;
       }
 
       const processedMessage = {
@@ -414,8 +427,18 @@ const Room: React.FC<RoomProps> = ({ roomId }) => {
     }
   }, [roomId, keycloak?.authenticated]);
 
+  const scrollToBottom = useCallback(() => {
+    if (messagesEndRef.current) {
+      messagesEndRef.current.scrollIntoView({ behavior: "smooth" });
+    }
+  }, []);
+
+  useEffect(() => {
+    scrollToBottom();
+  }, [messages, roomId, scrollToBottom]);
+
   return (
-    <div className="chat-area">
+    <div className="room-content">
       {expandedImage && (
         <div
           className="image-expanded-overlay"
@@ -573,11 +596,13 @@ const Room: React.FC<RoomProps> = ({ roomId }) => {
 
       {isMember ? (
         roomInfo ? (
-          <MessageInput
-            roomId={roomId}
-            onSend={() => {}}
-            roomInfo={roomInfo}
-          />
+          <div className="chat-input-wrapper">
+            <MessageInput
+              roomId={roomId}
+              onSend={() => {}}
+              roomInfo={roomInfo}
+            />
+          </div>
         ) : (
           <div className="loading-room-info">Loading room information...</div>
         )

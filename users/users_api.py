@@ -8,7 +8,7 @@ import keycloak
 from PIL import Image
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from fastapi.websockets import WebSocketState
-from typing import Optional, List, Dict, Union
+from typing import Optional, List, Dict, Union, Any
 from datetime import datetime, timezone
 import requests
 import json
@@ -16,7 +16,7 @@ import base64
 import redis
 import keycloak
 
-# Add parent directory to sys.path
+# Add parent directory to sys.path 
 import sys
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 from env import REDIS_PASSWORD
@@ -115,6 +115,36 @@ async def startup_event():
 def get_user_key(uuid: str) -> str:
     return f"user:{uuid}"
 
+def get_notifications_key(user_id: str) -> str:
+    return f"user:{user_id}:notifications"
+
+def add_notification(user_id: str, payload: Dict[str, Any]) -> Dict[str, Any]:
+    notification_id = str(uuid.uuid4())
+    notification = {
+        **payload,
+        "id": notification_id,
+        "timestamp": datetime.now(timezone.utc).isoformat()
+    }
+    redis_client.hset(
+        get_notifications_key(user_id),
+        notification_id,
+        json.dumps(notification)
+    )
+    return notification
+
+def get_profile_summary(user_uuid: str) -> Dict[str, Optional[str]]:
+    user_key = get_user_key(user_uuid)
+    user_data = redis_client.hgetall(user_key)
+    profile_data = {k.decode(): v.decode() for k, v in user_data.items()} if user_data else {}
+    display_name = profile_data.get("display_name") or profile_data.get("name") or user_uuid
+
+    return {
+        "uuid": user_uuid,
+        "name": profile_data.get("name"),
+        "display_name": display_name,
+        "picture": profile_data.get("picture")
+    }
+
 @app.post("/users/", response_model=Dict)
 def create_user(
     user: Dict,
@@ -177,11 +207,7 @@ async def get_current_user_profile(
 
     user_key = get_user_key(user_uuid)
     user_data = redis_client.hgetall(user_key)
-    if not user_data:
-        raise HTTPException(status_code=404, detail="User not found")
-
-    # Convert bytes to strings
-    profile_data = {k.decode(): v.decode() for k, v in user_data.items()}
+    profile_data = {k.decode(): v.decode() for k, v in user_data.items()} if user_data else {}
 
     # Return all profile fields for own profile
     return profile_data
@@ -197,11 +223,14 @@ async def get_profile_by_uuid(
 
     user_key = get_user_key(user_uuid)
     user_data = redis_client.hgetall(user_key)
-    if not user_data:
-        raise HTTPException(status_code=404, detail="User not found")
-
-    # Convert bytes to strings
-    profile_data = {k.decode(): v.decode() for k, v in user_data.items()}
+    if user_data:
+        profile_data = {k.decode(): v.decode() for k, v in user_data.items()}
+    else:
+        profile_data = {
+            "uuid": user_uuid,
+            "display_name": user_uuid,
+            "name": user_uuid
+        }
 
     # Get default image if no picture set
     default_image_path = os.path.join(current_dir, "..", "webapp", "public", "assets", "dummy-image.jpg")
@@ -212,14 +241,60 @@ async def get_profile_by_uuid(
         profile_data["picture"] = picture
 
     # Return only public profile fields for other users
+    display_name = (
+        profile_data.get("display_name")
+        or profile_data.get("name")
+        or user_uuid
+    )
+
     return {
         "uuid": user_uuid,
         "name": profile_data.get("name"),
-        "display_name": profile_data.get("display_name"),
+        "display_name": display_name,
         "bio": profile_data.get("bio"),
         "picture": profile_data.get("picture")
     }
 
+@app.get("/people")
+async def list_people(current_user: dict = Depends(get_current_user)):
+    """Return a list of all user profiles for discovery."""
+    people = []
+    try:
+        for key in redis_client.scan_iter("user:*"):
+            key_str = key.decode()
+            if key_str.endswith(":rooms"):
+                continue
+            # Skip nested keys like user:{id}:something
+            if key_str.count(":") != 1:
+                continue
+
+            user_uuid = key_str.split(":")[1]
+            user_data = redis_client.hgetall(key)
+            if not user_data:
+                profile_data = {
+                    "name": user_uuid,
+                    "display_name": user_uuid,
+                    "bio": "",
+                    "picture": None
+                }
+            else:
+                profile_data = {k.decode(): v.decode() for k, v in user_data.items()}
+            display_name = (
+                profile_data.get("display_name")
+                or profile_data.get("name")
+                or user_uuid
+            )
+            people.append({
+                "uuid": user_uuid,
+                "name": profile_data.get("name"),
+                "display_name": display_name,
+                "bio": profile_data.get("bio"),
+                "picture": profile_data.get("picture")
+            })
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail="Failed to fetch people") from exc
+
+    return {"people": people}
 
 def get_room_key(room_id: str) -> str:
     return f"room:{room_id}"
@@ -448,12 +523,143 @@ async def get_room_messages(
             
     return {"messages": parsed_messages}
 
+@app.get("/rooms/{room_id}/members")
+async def get_room_members(
+    room_id: str,
+    current_user: dict = Depends(get_current_user)
+):
+    """Return list of room members with basic profile details"""
+    user_id = current_user.get("sub")
+    if not user_id or not check_room_access(room_id, user_id):
+        raise HTTPException(status_code=403, detail="Access denied")
+
+    member_ids = redis_client.smembers(get_users_key(room_id))
+    members = []
+    for member in member_ids:
+        user_uuid = member.decode()
+        members.append(get_profile_summary(user_uuid))
+
+    return {"members": members}
+
 @app.post("/rooms/{room_id}/invite")
 async def invite_user(room_id: str, user_id: str, current_user: dict = Depends(get_current_user)):
     """Invite user to private room"""
     # In real implementation, add owner check here
     redis_client.sadd(get_users_key(room_id), user_id)
+    redis_client.sadd(get_user_rooms_key(user_id), room_id)
+
+    # Add notification for invited user
+    room_data = redis_client.hgetall(get_room_key(room_id))
+    room_name = room_data.get(b"name", b"").decode() if room_data else room_id
+    inviter = current_user.get("sub")
+    if inviter:
+        notification = add_notification(
+            user_id,
+            {
+                "type": "room_invite",
+                "room_id": room_id,
+                "room_name": room_name,
+                "invited_by": inviter,
+            },
+        )
+        await manager.send_to_user(
+            user_id,
+            {
+                "type": "notification",
+                "notification": notification,
+            },
+        )
     return {"status": "user invited"}
+
+@app.delete("/rooms/{room_id}/members/{member_id}")
+async def remove_room_member(
+    room_id: str,
+    member_id: str,
+    current_user: dict = Depends(get_current_user)
+):
+    """Allow room admins to remove members from the room"""
+    requester_id = current_user.get("sub")
+    if not requester_id:
+        raise HTTPException(status_code=403, detail="Not authenticated")
+
+    if not redis_client.sismember(get_admins_key(room_id), requester_id):
+        raise HTTPException(status_code=403, detail="Only admins can remove members")
+
+    redis_client.srem(get_users_key(room_id), member_id)
+    redis_client.srem(get_user_rooms_key(member_id), room_id)
+    redis_client.srem(get_admins_key(room_id), member_id)
+    return {"status": "member removed"}
+
+@app.post("/rooms/{room_id}/admins/{member_id}")
+async def promote_room_admin(
+    room_id: str,
+    member_id: str,
+    current_user: dict = Depends(get_current_user)
+):
+    requester_id = current_user.get("sub")
+    if not requester_id:
+        raise HTTPException(status_code=403, detail="Not authenticated")
+
+    if not redis_client.sismember(get_admins_key(room_id), requester_id):
+        raise HTTPException(status_code=403, detail="Only admins can update admins")
+
+    if not redis_client.sismember(get_users_key(room_id), member_id):
+        raise HTTPException(status_code=400, detail="User is not in the room")
+
+    redis_client.sadd(get_admins_key(room_id), member_id)
+    return {"status": "admin added"}
+
+@app.delete("/rooms/{room_id}/admins/{member_id}")
+async def demote_room_admin(
+    room_id: str,
+    member_id: str,
+    current_user: dict = Depends(get_current_user)
+):
+    requester_id = current_user.get("sub")
+    if not requester_id:
+        raise HTTPException(status_code=403, detail="Not authenticated")
+
+    if not redis_client.sismember(get_admins_key(room_id), requester_id):
+        raise HTTPException(status_code=403, detail="Only admins can update admins")
+
+    if member_id == requester_id:
+        raise HTTPException(status_code=400, detail="Cannot demote yourself")
+
+    redis_client.srem(get_admins_key(room_id), member_id)
+    return {"status": "admin removed"}
+
+@app.get("/notifications")
+async def get_notifications(current_user: dict = Depends(get_current_user)):
+    """Return notifications for the current user"""
+    user_id = current_user.get("sub")
+    if not user_id:
+        raise HTTPException(status_code=403, detail="Not authenticated")
+
+    notifications_data = redis_client.hgetall(get_notifications_key(user_id))
+    notifications = []
+    for notification_id, payload in notifications_data.items():
+        try:
+            notification = json.loads(payload.decode())
+            notifications.append(notification)
+        except json.JSONDecodeError:
+            continue
+
+    # Sort newest first
+    notifications.sort(key=lambda n: n.get("timestamp", ""), reverse=True)
+
+    return {"notifications": notifications}
+
+@app.post("/notifications/{notification_id}/read")
+async def mark_notification_read(
+    notification_id: str,
+    current_user: dict = Depends(get_current_user),
+):
+    user_id = current_user.get("sub")
+    if not user_id:
+        raise HTTPException(status_code=403, detail="Not authenticated")
+
+    redis_client.hdel(get_notifications_key(user_id), notification_id)
+    return {"status": "notification dismissed"}
 
 
 @app.websocket("/ws") 
@@ -493,3 +699,10 @@ async def websocket_endpoint(websocket: WebSocket):
 if __name__ == "__main__": 
     import uvicorn
     uvicorn.run("users_api:app", host="0.0.0.0", port=8000, reload=True)
+    async def send_to_user(self, user_id: str, payload: Dict[str, Any]):
+        websocket = self.client_connections.get(user_id)
+        if websocket and websocket.client_state == WebSocketState.CONNECTED:
+            try:
+                await websocket.send_json(payload)
+            except WebSocketDisconnect:
+                self.disconnect(user_id)

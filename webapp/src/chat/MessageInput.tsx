@@ -28,6 +28,7 @@ const MessageInput: React.FC<MessageInputProps> = ({
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [message_text, setNewMessage] = useState("");
   const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
+  const [isDragActive, setIsDragActive] = useState(false);
 
   useEffect(() => {
     if (tdfClient) {
@@ -215,47 +216,34 @@ const MessageInput: React.FC<MessageInputProps> = ({
   const handleDragOver = (e: React.DragEvent) => {
     e.preventDefault();
     e.stopPropagation();
+    if (!isDragActive) {
+      setIsDragActive(true);
+    }
+  };
+
+  const handleDragLeave = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (isDragActive) {
+      setIsDragActive(false);
+    }
   };
 
   const handleDrop = (e: React.DragEvent) => {
     e.preventDefault();
     e.stopPropagation();
+    setIsDragActive(false);
 
-      if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
-        setSelectedFiles((prev) => [...prev, ...Array.from(e.dataTransfer.files)]);
-      }
-    };
+    if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+      setSelectedFiles((prev) => [
+        ...prev,
+        ...Array.from(e.dataTransfer.files),
+      ]);
+    }
+  };
 
   return (
     <div className="message-input">
-      <div
-        className="message-input-container"
-        onDragOver={handleDragOver}
-        onDrop={handleDrop}
-      >
-        <textarea
-          value={message_text}
-          onChange={(e) => setNewMessage(e.target.value)}
-          onKeyDown={handleKeyPress}
-          placeholder="Type a message or drag files here..."
-          className="message-textarea"
-        />
-      </div>
-      <input
-        ref={fileInputRef}
-        type="file"
-        accept="*"
-        onChange={handleFileChange}
-        className="hidden-file-input"
-        multiple
-      />
-      <button
-        onClick={() => fileInputRef.current?.click()}
-        className="add-files-button"
-        title="Attach files"
-      >
-        📎
-      </button>
       {selectedFiles.length > 0 && (
         <div className="file-previews-container">
           {selectedFiles.map((file, index) => (
@@ -286,9 +274,45 @@ const MessageInput: React.FC<MessageInputProps> = ({
           ))}
         </div>
       )}
-      <button onClick={handleSendMessage} className="send-button">
-        Send
-      </button>
+      <div
+        className={`message-input-shell ${
+          isDragActive ? "drag-active" : ""
+        }`}
+        onDragOver={handleDragOver}
+        onDrop={handleDrop}
+        onDragLeave={handleDragLeave}
+      >
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept="*"
+          onChange={handleFileChange}
+          className="hidden-file-input"
+          multiple
+        />
+        <button
+          onClick={() => fileInputRef.current?.click()}
+          className="input-icon-button attach-button"
+          title="Attach files"
+          type="button"
+        >
+          📎
+        </button>
+        <textarea
+          value={message_text}
+          onChange={(e) => setNewMessage(e.target.value)}
+          onKeyDown={handleKeyPress}
+          placeholder="Type a message or drag files here..."
+          className="message-textarea"
+        />
+        <button
+          onClick={handleSendMessage}
+          className="message-send-button"
+          type="button"
+        >
+          Send
+        </button>
+      </div>
     </div>
   );
 };

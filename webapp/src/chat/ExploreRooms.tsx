@@ -29,7 +29,8 @@ const ExploreRooms: React.FC<ExploreRoomsProps> = ({ onRoomSelect }) => {
         if (response.ok) {
           const rooms = await response.json();
           console.log('Fetched rooms:', rooms);
-          setRooms(Array.isArray(rooms) ? rooms : []);
+          const publicRooms = Array.isArray(rooms) ? rooms.filter((room: Room) => room.is_public) : [];
+          setRooms(publicRooms);
         } else {
           console.error('Failed to fetch rooms:', response.status, response.statusText);
         }

@@ -15,9 +15,13 @@ const ConnectionStatus: React.FC = () => {
   const status = statusMap[connectionStatus];
 
   return (
-    <div className="connection-status" style={{ backgroundColor: status.color }}>
+    <div
+      className={`connection-status ${connectionStatus}`}
+      style={{ backgroundColor: status.color }}
+      title={status.text}
+      aria-label={status.text}
+    >
       <div className="status-dot" />
-      <span>{status.text}</span>
     </div>
   );
 };

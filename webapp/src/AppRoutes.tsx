@@ -23,30 +23,29 @@ const AppRoutes: React.FC<AppRoutesProps> = () => {
     return (
         <div id="fullpage">
             <Navbar onProfileClick={() => setShowProfileModal(true)} />
-            <Routes>
-                <Route path="/" element={<ChatPage />} />
-                <Route path="/privacy" element={<Privacy />} />
-                <Route path="/chat" element={<ChatPage />} />
-                <Route path="/create-room" element={<CreateRoom />} />
-                <Route path="/events" element={<Events />} />
-                <Route path="/feed" element={<Feed />} />
-                <Route path="/navbar" element={<Navbar onProfileClick={() => setShowProfileModal(true)} />} />
-                <Route 
-                  path="/chat/:roomId" 
-                  element={<ChatPage roomId="" />}
-                />
-                <Route 
-                  path="/room/:roomId" 
-                  element={<Room roomId="" />}
-                />
-                <Route path="/video" element={<VideoFeed />} />
-                <Route 
-                  path="/explore" 
-                  element={<ExploreRooms onRoomSelect={() => {}} />} 
-                />
-                <Route path="/tdf" element={<TDF />} />
-                <Route path="/apichat" element={<APIChat />} />
-            </Routes>
+            <div className="app-content">
+                <Routes>
+                    <Route path="/" element={<ChatPage />} />
+                    <Route path="/privacy" element={<Privacy />} />
+                    <Route path="/chat" element={<ChatPage />} />
+                    <Route path="/chat/:roomId" element={<ChatPage />} />
+                    <Route path="/create-room" element={<CreateRoom />} />
+                    <Route path="/events" element={<Events />} />
+                    <Route path="/feed" element={<Feed />} />
+                    <Route path="/navbar" element={<Navbar onProfileClick={() => setShowProfileModal(true)} />} />
+                    <Route 
+                      path="/room/:roomId" 
+                      element={<Room roomId="" />}
+                    />
+                    <Route path="/video" element={<VideoFeed />} />
+                    <Route 
+                      path="/explore" 
+                      element={<ExploreRooms onRoomSelect={() => {}} />} 
+                    />
+                    <Route path="/tdf" element={<TDF />} />
+                    <Route path="/apichat" element={<APIChat />} />
+                </Routes>
+            </div>
 
             {/* Profile Modal */}
             {showProfileModal && (

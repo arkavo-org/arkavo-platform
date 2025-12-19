@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import '../css/ChatPage.css';
+import '../css/CreateRoom.css';
 
 const CreateRoom: React.FC = () => {
     const navigate = useNavigate();
@@ -9,6 +9,7 @@ const CreateRoom: React.FC = () => {
     const [roomName, setRoomName] = useState('');
     const [isPublic, setIsPublic] = useState(true);
     const [error, setError] = useState('');
+    const [isSubmitting, setIsSubmitting] = useState(false);
 
     const handleCreateRoom = async (e: React.FormEvent) => {
         console.log('Creating room with name:', roomName, 'Public:', isPublic);
@@ -22,19 +23,27 @@ const CreateRoom: React.FC = () => {
         // Generate random UUID for room ID
         const roomId = crypto.randomUUID();
         
-        const response = await fetch(`${import.meta.env.VITE_USERS_API_URL}/rooms/${roomId}?is_public=${isPublic}`, {
-            method: 'GET',
-            headers: {
-                'Content-Type': 'application/json',
-                Authorization: `Bearer ${keycloak?.token}`
+        try {
+            setIsSubmitting(true);
+            const response = await fetch(`${import.meta.env.VITE_USERS_API_URL}/rooms/${roomId}?is_public=${isPublic}`, {
+                method: 'GET',
+                headers: {
+                    'Content-Type': 'application/json',
+                    Authorization: `Bearer ${keycloak?.token}`
+                }
+            });
+    
+            console.log('Response status:', response.status);
+            if (response.ok) {
+                navigate(`/chat?roomid=${roomId}`);
+            } else {
+                setError('Failed to create room');
             }
-        });
-
-        console.log('Response status:', response.status);
-        if (response.ok) {
-            navigate(`/chat?roomid=${roomId}`);
-        } else {
-            setError('Failed to create room');
+        } catch (err) {
+            console.error('Create room failed:', err);
+            setError('Something went wrong while creating the room.');
+        } finally {
+            setIsSubmitting(false);
         }
     };
 
@@ -44,32 +53,80 @@ const CreateRoom: React.FC = () => {
     };
 
     return (
-        <div className="create-room-container">
-            <h2>Create a Room</h2>
-            {error && <div className="error-message">{error}</div>}
-            <form onSubmit={handleCreateRoom}>
-                <label>
-                    Room Name:
-                    <input
-                        type="text"
-                        value={roomName}
-                        onChange={(e) => setRoomName(e.target.value)}
-                        required
-                    />
-                </label>
-                <label className="room-visibility">
-                    <input
-                        type="checkbox"
-                        checked={isPublic}
-                        onChange={(e) => setIsPublic(e.target.checked)}
-                    />
-                    Public Room
-                </label>
-                <button type="submit">Create Room</button>
-                <button type="button" onClick={handleExit} className="exit-button">
-                    Exit
-                </button>
-            </form>
+        <div className="create-room-page">
+            <div className="create-room-card">
+                <div className="create-room-header">
+                    <div className="header-icon">🗨️</div>
+                    <div>
+                        <p className="section-eyebrow">Create Room</p>
+                        <h2>Create Room</h2>
+                    </div>
+                </div>
+
+                {error && <div className="error-message">{error}</div>}
+
+                <form className="create-room-form" onSubmit={handleCreateRoom}>
+                    <label htmlFor="room-name">Room name</label>
+                    <div className="input-field">
+                        <input
+                            id="room-name"
+                            type="text"
+                            value={roomName}
+                            onChange={(e) => setRoomName(e.target.value)}
+                            placeholder="e.g., War Room, Design Huddle, Incident #592"
+                            maxLength={80}
+                            required
+                        />
+                        <span className="input-hint">
+                            {80 - roomName.length} characters remaining
+                        </span>
+                    </div>
+
+                    <label>Visibility</label>
+                    <div className="room-visibility-toggle" role="group" aria-label="Room visibility">
+                        <button
+                            type="button"
+                            className={`toggle-option ${isPublic ? 'active' : ''}`}
+                            onClick={() => setIsPublic(true)}
+                        >
+                            <span className="option-title">Public</span>
+                            <span className="option-caption">Anyone can find and join</span>
+                        </button>
+                        <button
+                            type="button"
+                            className={`toggle-option ${!isPublic ? 'active' : ''}`}
+                            onClick={() => setIsPublic(false)}
+                        >
+                            <span className="option-title">Private</span>
+                            <span className="option-caption">Only invited members</span>
+                        </button>
+                    </div>
+
+                    <p className="helper-text">
+                        {isPublic
+                            ? 'Public rooms are discoverable in Explore Rooms and anyone can hop in.'
+                            : 'Private rooms stay hidden. Share the link or invite members manually.'}
+                    </p>
+
+                    <div className="form-actions">
+                        <button
+                            type="button"
+                            className="ghost-button"
+                            onClick={handleExit}
+                            disabled={isSubmitting}
+                        >
+                            Cancel
+                        </button>
+                        <button
+                            type="submit"
+                            className="primary-button"
+                            disabled={!roomName.trim() || isSubmitting}
+                        >
+                            {isSubmitting ? 'Creating...' : 'Create Room'}
+                        </button>
+                    </div>
+                </form>
+            </div>
         </div>
     );
 };

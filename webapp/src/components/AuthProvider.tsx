@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { AuthProvider as AuthContextProvider } from '../context/AuthContext';
 import Keycloak from "keycloak-js";
 import { AuthProvider as TDFAuthProvider, HttpRequest, NanoTDFDatasetClient } from '@opentdf/sdk';
@@ -27,12 +27,16 @@ export interface UserProfile {
 const initializeAuth = async (): Promise<boolean> => {
   try {
     const authenticated = await keycloak.init({
-      onLoad: 'login-required',
+      onLoad: 'check-sso',
       checkLoginIframe: false,
       enableLogging: true,
       silentCheckSsoRedirectUri: window.location.origin + '/silent-check-sso.html'
     });
-    return authenticated;
+    if (!authenticated) {
+      await keycloak.login();
+      return true;
+    }
+    return true;
   } catch (error) {
     console.error("Keycloak initialization failed:", error);
     return false;
@@ -132,6 +136,7 @@ const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   const [isLoading, setIsLoading] = useState(true);
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
   const [tdfClient, setTdfClient] = useState<NanoTDFDatasetClient | null>(null);
+  const hasSyncedIdpImage = useRef(false);
 
   const initializeTdfClient = async () => {
     if (!keycloak?.authenticated) return;
@@ -159,6 +164,116 @@ const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     }
   };
 
+  const convertImageSourceToBase64 = async (source: string): Promise<string | null> => {
+    try {
+      if (!source) return null;
+      if (source.startsWith("data:")) {
+        const [, payload] = source.split(",");
+        return payload || null;
+      }
+      const response = await fetch(source);
+      if (!response.ok) {
+        console.warn("Unable to fetch IdP profile picture:", response.status);
+        return null;
+      }
+      const blob = await response.blob();
+      return await new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onloadend = () => {
+          const result = reader.result as string;
+          const [, payload] = result.split(",");
+          resolve(payload || null);
+        };
+        reader.onerror = () => reject(new Error("Failed to convert image blob"));
+        reader.readAsDataURL(blob);
+      });
+    } catch (error) {
+      console.error("Error converting IdP picture:", error);
+      return null;
+    }
+  };
+
+  const syncProfilePictureFromIdp = async (idpPicture?: string | null) => {
+    if (
+      hasSyncedIdpImage.current ||
+      !keycloak?.token ||
+      !idpPicture
+    ) {
+      return;
+    }
+
+    const lowerSrc = idpPicture.toLowerCase();
+    const isDefaultPicture =
+      lowerSrc.includes("dummy-image") || lowerSrc.includes("user_3626098");
+    if (isDefaultPicture) {
+      hasSyncedIdpImage.current = true;
+      return;
+    }
+
+    try {
+      if (keycloak.isTokenExpired()) {
+        await keycloak.updateToken(30);
+      }
+
+      let existingProfile: Record<string, any> | null = null;
+      try {
+        const response = await fetch(
+          `${import.meta.env.VITE_USERS_API_URL}/profile`,
+          {
+            headers: {
+              Authorization: `Bearer ${keycloak.token}`,
+            },
+          }
+        );
+        if (response.ok) {
+          existingProfile = await response.json();
+        }
+      } catch (error) {
+        console.debug("Unable to load stored profile for sync:", error);
+      }
+
+      if (existingProfile?.picture) {
+        hasSyncedIdpImage.current = true;
+        return;
+      }
+
+      const base64Image = await convertImageSourceToBase64(idpPicture);
+      if (!base64Image) return;
+
+      const idpDisplayName =
+        keycloak.tokenParsed?.name ||
+        keycloak.tokenParsed?.preferred_username ||
+        keycloak.tokenParsed?.email ||
+        "";
+
+      const payload = {
+        ...(existingProfile || {}),
+        picture: base64Image,
+        email:
+          (existingProfile && existingProfile.email) ||
+          keycloak.tokenParsed?.email ||
+          "",
+        display_name:
+          existingProfile?.display_name ||
+          idpDisplayName,
+        name: existingProfile?.name || idpDisplayName,
+      };
+
+      await fetch(`${import.meta.env.VITE_USERS_API_URL}/profile`, {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${keycloak.token}`,
+        },
+        body: JSON.stringify(payload),
+      });
+
+      hasSyncedIdpImage.current = true;
+    } catch (error) {
+      console.error("Failed to sync IdP profile picture:", error);
+    }
+  };
+
   // Initialize Keycloak
   useEffect(() => {
     const initAuth = async () => {
@@ -168,6 +283,9 @@ const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         
         if (authenticated) {
           const profile = await getUserProfile();
+          if (profile?.picture) {
+            await syncProfilePictureFromIdp(profile.picture);
+          }
           setUserProfile(profile);
           // Initialize TDF client on first load
           if (!tdfClient) {
@@ -216,6 +334,7 @@ const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       await keycloak.logout(logoutParams);
       setIsAuthenticated(false);
       setUserProfile(null);
+      hasSyncedIdpImage.current = false;
     } catch (error) {
       console.error('Logout error:', error);
       throw error;
