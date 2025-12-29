@@ -2,15 +2,14 @@
 """
 stopAll.py - Stop all containers started by run.py
 
-This script stops the Nextcloud containers in the proper order:
-1. nextcloud-nginx (reverse proxy)
-2. nextcloud-app (PHP-FPM application)
-3. nextcloud-redis (Redis cache)
-4. nextcloud-db (PostgreSQL database)
+This script stops the Nextcloud containers in the proper order. By default it
+stops only the frontend components (nginx + PHP-FPM). Use --dbs if you also
+need to stop Redis/PostgreSQL.
 
 It uses the same configuration from env.py to ensure consistency.
 """
 
+import argparse
 import os
 import sys
 import time
@@ -21,20 +20,30 @@ sys.path.insert(0, here)
 
 import utils_docker
 
-def stop_nextcloud_containers():
-    """Stop all Nextcloud containers."""
+def _containers_to_stop(stop_dbs: bool) -> list[str]:
+    containers = [
+        "nextcloud-app",    # PHP-FPM application
+    ]
+    if stop_dbs:
+        containers.extend(
+            [
+                "nextcloud-redis",  # Redis cache
+                "nextcloud-db",     # PostgreSQL database
+            ]
+        )
+    return containers
+
+
+def stop_nextcloud_containers(stop_dbs: bool) -> None:
+    """Stop the requested Nextcloud containers."""
     print("Stopping Nextcloud containers...")
     
     # Import env to get container names and network
     import env
     
-    # Stop containers in reverse order of startup
-    containers_to_stop = [
-        "nextcloud-nginx",  # Nginx reverse proxy
-        "nextcloud-app",    # PHP-FPM application
-        "nextcloud-redis",  # Redis cache
-        "nextcloud-db",     # PostgreSQL database
-    ]
+    containers_to_stop = _containers_to_stop(stop_dbs)
+    if not stop_dbs:
+        print("Leaving nextcloud-redis and nextcloud-db running (use --dbs to stop them).")
     
     for container_name in containers_to_stop:
         print(f"Stopping {container_name}...")
@@ -64,8 +73,19 @@ def list_running_containers():
     except Exception as e:
         print(f"Error listing containers: {e}")
 
+def parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(description="Stop Nextcloud containers")
+    parser.add_argument(
+        "--dbs",
+        action="store_true",
+        help="Also stop nextcloud-redis and nextcloud-db",
+    )
+    return parser.parse_args()
+
+
 def main():
     """Main function."""
+    args = parse_args()
     print("=" * 60)
     print("stopAll.py - Stop Nextcloud Containers")
     print("=" * 60)
@@ -73,9 +93,13 @@ def main():
     # First, list what's running
     list_running_containers()
     
-    # Ask for confirmation
+    # Show planned stops and ask for confirmation
     print("\n" + "-" * 60)
-    response = input("Do you want to stop all Nextcloud containers? (y/N): ").strip().lower()
+    planned = _containers_to_stop(args.dbs)
+    print("This will stop:")
+    for name in planned:
+        print(f"  - {name}")
+    response = input("\nDo you want to stop the containers listed above? (y/N): ").strip().lower()
     
     if response not in ['y', 'yes']:
         print("Operation cancelled.")
@@ -84,7 +108,7 @@ def main():
     print("\n" + "-" * 60)
     
     # Stop the containers
-    stop_nextcloud_containers()
+    stop_nextcloud_containers(stop_dbs=args.dbs)
     
     # List containers again to verify
     print("\n" + "-" * 60)

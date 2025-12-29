@@ -130,7 +130,7 @@ if "nextcloud" in env.SERVICES_TO_RUN:
     utils_docker.wait_for_db(network=env.NETWORK_NAME, db_url="nextcloud-db:5432")
     utils_docker.run_container(env.nextcloud_redis)
     utils_docker.run_container(env.nextcloud_app)
-    utils_docker.wait_for_port("nextcloud-app", 9000, network=env.NETWORK_NAME)
+    utils_docker.wait_for_port("nextcloud-app", 80, network=env.NETWORK_NAME)
     
 # --- NGINX ---
 if "nginx" in env.SERVICES_TO_RUN:

@@ -320,11 +320,6 @@ nginx = dict(
             "bind": "/worldchat",
             "mode": "rw",
         },
-        os.path.join(nextcloud_base_dir, "html"): {
-            "bind": "/var/www/html",
-            "mode": "ro",
-        },
-        
         os.path.join(certbot_ssl_home, "ssl"): {"bind": "/etc/nginx/ssl", "mode": "rw"},
         os.path.join(certs_dir, "html"): {
             "bind": "/usr/share/nginx/html",
@@ -841,7 +836,7 @@ nextcloud_redis = dict(
 
 nextcloud_app = dict(
     name="nextcloud-app",
-    image="nextcloud:stable-fpm",
+    image="nextcloud:stable",
     detach=True,
     network=NETWORK_NAME,
     restart_policy={"Name": "unless-stopped"},
