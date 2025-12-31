@@ -25,11 +25,13 @@ keys_dir = os.path.join(certs_dir, "keys")
 synapse_dir = os.path.join(current_dir, "synapse")
 bsky_bridge_dir = os.path.join(current_dir, "bsky-bridge")
 gitea_dir = os.path.join(current_dir, "gitea")
+iroh_dir = os.path.join(current_dir, "iroh")
 
 # Nextcloud data directory setup
 os.makedirs(nextcloud_data_root, exist_ok=True)
 os.makedirs(nextcloud_base_dir, exist_ok=True)
 os.makedirs(certs_dir, exist_ok=True)
+os.makedirs(iroh_dir, exist_ok=True)
 if "NEXTCLOUD_FQDN" not in globals():
     NEXTCLOUD_FQDN = "71.179.48.229"
 # Check to see if we're in an EC2 instance
@@ -77,6 +79,8 @@ GITEA_BASE_URL = "gitea." + BACKEND_LOCATION
 WHISPER_BASE_URL = "whisper." + BACKEND_LOCATION
 USERS_BASE_URL = "users." + BACKEND_LOCATION
 NEXTCLOUD_BASE_URL = "nextcloud." + BACKEND_LOCATION
+IROH_BASE_URL = "iroh." + BACKEND_LOCATION
+IROH_CONTAINER_NAME = "iroh_arkavo"
 
 KEYCLOAK_HOST = "https://" + KEYCLOAK_BASE_URL
 PROTOCOL_OPENTDF_BASE_URL = "https://" + OPENTDF_BASE_URL
@@ -798,6 +802,29 @@ redis = dict(
 # to get rid of memory warning:
 # on the host, run:
 # echo 'vm.overcommit_memory = 1' | sudo tee -a /etc/sysctl.conf
+
+iroh = dict(
+    image="n0computer/iroh:latest",
+    name=IROH_CONTAINER_NAME,
+    network=NETWORK_NAME,
+    restart_policy={"Name": "unless-stopped"},
+    detach=True,
+    volumes={
+        iroh_dir: {"bind": "/root/.local/share/iroh", "mode": "rw"},
+    },
+    environment={
+        # Increase verbosity for container logs; adjust to debug if needed.
+        "RUST_LOG": "info",
+    },
+    ports={
+        "11204/udp": 11204,
+        "11205/tcp": 11205,
+        "11205/udp": 11205,
+        "9090/tcp": 9090,
+    },
+    # Bind RPC on 0.0.0.0:9090 so nginx on the same Docker network can reach it.
+    command=["--rpc-addr", "0.0.0.0:9090", "start"],
+)
 
 # Nextcloud stack --------------------------------------------------
 nextcloud_db = dict(

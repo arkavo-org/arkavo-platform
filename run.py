@@ -133,35 +133,7 @@ if "nextcloud" in env.SERVICES_TO_RUN:
     utils_docker.wait_for_port("nextcloud-app", 80, network=env.NETWORK_NAME)
     
 # --- NGINX ---
-if "nginx" in env.SERVICES_TO_RUN:
-    if not os.path.isfile("certs/ca.crt"):
-        if env.USER_WEBSITE == "localhost" and not not in_github_actions:
-            utils_docker.generateDevKeys(outdir=env.certs_dir)
-        else:
-            pass
-            #utils_docker.generateProdKeys(outdir=env.certs_dir, website=env.USER_WEBSITE)
-    utils_docker.run_container(env.nginx)
 
-    
-# --- OPENTDF ---
-if "opentdf" in env.SERVICES_TO_RUN:
-    opentdf_container_running = False
-    try:
-        container = utils_docker.DOCKER_CLIENT.containers.get(env.opentdf["name"])
-        opentdf_container_running = container.status == "running"
-    except Exception:
-        # Container doesn't exist or Docker isn't reporting it as running yet
-        pass
-    utils_docker.run_container(env.opentdfdb)
-    utils_docker.wait_for_db(network=env.NETWORK_NAME, db_url="opentdfdb:5432")
-    if not opentdf_container_running and False:
-        print(f"Waiting for {env.KEYCLOAK_INTERNAL_AUTH_URL}")
-        utils_docker.wait_for_url(
-            env.KEYCLOAK_INTERNAL_AUTH_URL, network=env.NETWORK_NAME
-        )
-    utils_docker.run_container(env.opentdf)
-
-    
 # --- ORG ---
 if "org" in env.SERVICES_TO_RUN:
     utils_docker.run_container(env.org)
@@ -219,5 +191,38 @@ if "users" in env.SERVICES_TO_RUN:
     utils_docker.run_container(env.redis)
     utils_docker.run_container(env.users_api)
 
+# --- IROH ---
+if "iroh" in env.SERVICES_TO_RUN:
+    utils_docker.run_container(env.iroh)
+
+# --- NGINX ---
+if "nginx" in env.SERVICES_TO_RUN:
+    if not os.path.isfile("certs/ca.crt"):
+        if env.USER_WEBSITE == "localhost" and not not in_github_actions:
+            utils_docker.generateDevKeys(outdir=env.certs_dir)
+        else:
+            pass
+            #utils_docker.generateProdKeys(outdir=env.certs_dir, website=env.USER_WEBSITE)
+    utils_docker.run_container(env.nginx)
+
+
+    
+# --- OPENTDF ---
+if "opentdf" in env.SERVICES_TO_RUN:
+    opentdf_container_running = False
+    try:
+        container = utils_docker.DOCKER_CLIENT.containers.get(env.opentdf["name"])
+        opentdf_container_running = container.status == "running"
+    except Exception:
+        # Container doesn't exist or Docker isn't reporting it as running yet
+        pass
+    utils_docker.run_container(env.opentdfdb)
+    utils_docker.wait_for_db(network=env.NETWORK_NAME, db_url="opentdfdb:5432")
+    if not opentdf_container_running and False:
+        print(f"Waiting for {env.KEYCLOAK_INTERNAL_AUTH_URL}")
+        utils_docker.wait_for_url(
+            env.KEYCLOAK_INTERNAL_AUTH_URL, network=env.NETWORK_NAME
+        )
+    utils_docker.run_container(env.opentdf)
 
     

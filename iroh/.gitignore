@@ -1,0 +1,6 @@
+default*
+docs*
+keypair
+rpc*
+blobs*
+logs*

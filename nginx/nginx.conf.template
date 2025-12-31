@@ -1,5 +1,49 @@
 events {}
 
+stream {
+    resolver 127.0.0.11 valid=30s;
+
+    upstream iroh_udp_11204 {
+        server $IROH_CONTAINER_NAME:11204;
+    }
+    server {
+        listen 11204 udp;
+        proxy_pass iroh_udp_11204;
+    }
+
+    upstream iroh_tcp_11205 {
+        server $IROH_CONTAINER_NAME:11205;
+    }
+    server {
+        listen 11205;
+        proxy_pass iroh_tcp_11205;
+    }
+
+    upstream iroh_udp_11205 {
+        server $IROH_CONTAINER_NAME:11205;
+    }
+    server {
+        listen 11205 udp;
+        proxy_pass iroh_udp_11205;
+    }
+
+    upstream iroh_tcp_9090 {
+        server $IROH_CONTAINER_NAME:9090;
+    }
+    server {
+        listen 9090;
+        proxy_pass iroh_tcp_9090;
+    }
+
+    upstream iroh_udp_9090 {
+        server $IROH_CONTAINER_NAME:9090;
+    }
+    server {
+        listen 9090 udp;
+        proxy_pass iroh_udp_9090;
+    }
+}
+
 http {
     resolver 127.0.0.11 valid=30s;
 
