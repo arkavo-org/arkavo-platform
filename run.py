@@ -191,6 +191,11 @@ if "users" in env.SERVICES_TO_RUN:
     utils_docker.run_container(env.redis)
     utils_docker.run_container(env.users_api)
 
+# --- BALLOT ---
+if "ballot" in env.SERVICES_TO_RUN:
+    utils_docker.run_container(env.ballot_redis)
+    utils_docker.run_container(env.ballot_backend)
+
 # --- IROH ---
 if "iroh" in env.SERVICES_TO_RUN:
     utils_docker.run_container(env.iroh)
@@ -224,5 +229,3 @@ if "opentdf" in env.SERVICES_TO_RUN:
             env.KEYCLOAK_INTERNAL_AUTH_URL, network=env.NETWORK_NAME
         )
     utils_docker.run_container(env.opentdf)
-
-    

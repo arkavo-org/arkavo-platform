@@ -78,6 +78,7 @@ INITIATIVE_BASE_URL = "initiative." + BACKEND_LOCATION
 GITEA_BASE_URL = "gitea." + BACKEND_LOCATION
 WHISPER_BASE_URL = "whisper." + BACKEND_LOCATION
 USERS_BASE_URL = "users." + BACKEND_LOCATION
+BALLOT_BASE_URL = "ballot." + BACKEND_LOCATION
 NEXTCLOUD_BASE_URL = "nextcloud." + BACKEND_LOCATION
 IROH_BASE_URL = "iroh." + BACKEND_LOCATION
 IROH_CONTAINER_NAME = "iroh_arkavo"
@@ -802,6 +803,46 @@ redis = dict(
 # to get rid of memory warning:
 # on the host, run:
 # echo 'vm.overcommit_memory = 1' | sudo tee -a /etc/sysctl.conf
+
+# Ballot Redis instance
+ballot_redis = dict(
+    image="redis:7.2-alpine",
+    name="ballot_redis",
+    network=NETWORK_NAME,
+    restart_policy={"Name": "always"},
+    detach=True,
+    ports={"6380/tcp": 6380},
+    volumes={
+        "ballot_redis_data": {"bind": "/data", "mode": "rw"},
+        os.path.join(current_dir, "redis", "redis.conf"): {"bind": "/usr/local/etc/redis/redis.conf", "mode": "ro"},
+    },
+    environment={
+        "REDIS_PASSWORD": REDIS_PASSWORD,
+        "REDIS_TLS_ENABLED": "false",
+        "REDIS_MEMORY_LIMIT": "512mb",
+    },
+    command=["redis-server", "/usr/local/etc/redis/redis.conf", "--port", "6380"],
+)
+
+# Ballot backend API
+ballot_backend = dict(
+    image="python:3.11-slim",
+    name="ballot_backend",
+    network=NETWORK_NAME,
+    restart_policy={"Name": "always"},
+    detach=True,
+    ports={"8001/tcp": 8001},
+    volumes={
+        os.path.join(current_dir, "webapp", "public", "ballot-sign"): {"bind": "/app", "mode": "rw"},
+    },
+    working_dir="/app",
+    environment={
+        "REDIS_PASSWORD": REDIS_PASSWORD,
+        "BALLOT_REDIS_HOST": "ballot_redis",
+        "BALLOT_REDIS_PORT": "6380",
+    },
+    command=["sh", "-c", "pip install fastapi uvicorn redis pydantic && python ballot-backend.py"],
+)
 
 iroh = dict(
     image="n0computer/iroh:latest",

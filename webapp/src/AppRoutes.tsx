@@ -12,6 +12,7 @@ import ChatPage from './chat/ChatPage';
 import APIChat from './APIChat';
 import Events from './Events';
 import TDF from './TDF';
+import Ballot from './Ballot';
 import './css/App.css';
 import Bluesky from './Bluesky';
 
@@ -44,6 +45,7 @@ const AppRoutes: React.FC<AppRoutesProps> = () => {
                     />
                     <Route path="/tdf" element={<TDF />} />
                     <Route path="/apichat" element={<APIChat />} />
+                    <Route path="/ballot" element={<Ballot />} />
                 </Routes>
             </div>
 
