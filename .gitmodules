@@ -1,0 +1,3 @@
+[submodule "webapp/public/ballot-sign"]
+	path = webapp/public/ballot-sign
+	url = https://github.com/juliancoy/ballot-sign
