@@ -1,0 +1,3 @@
+[submodule "ballot-sign"]
+	path = ballot-sign
+	url = https://github.com/civictechdc/ballot-sign
