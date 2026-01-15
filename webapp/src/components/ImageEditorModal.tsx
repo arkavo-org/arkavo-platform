@@ -59,8 +59,16 @@ const ImageEditorModal: React.FC<ImageEditorModalProps> = ({ image, onClose, onS
   }, []);
 
   return (
-    <div className="modal-overlay" onDrop={handleDrop} onDragOver={(e) => e.preventDefault()}>
-      <div className="modal-content">
+    <div
+      className="image-editor-overlay"
+      onDrop={handleDrop}
+      onDragOver={(e) => e.preventDefault()}
+      onClick={onClose}
+    >
+      <div
+        className="image-editor-content"
+        onClick={(e) => e.stopPropagation()}
+      >
         <div className="upload-zone">
           <label htmlFor="imageUpload" className="upload-label">
             Click or drag an image here to upload

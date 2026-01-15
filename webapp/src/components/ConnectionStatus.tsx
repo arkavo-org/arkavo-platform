@@ -5,11 +5,14 @@ import './ConnectionStatus.css';
 const ConnectionStatus: React.FC = () => {
   const { connectionStatus } = useWebSocket();
 
+  const connectedColor = '#c65c1a';
+  const disconnectedColor = '#d64545';
+
   const statusMap = {
-    connecting: { text: 'Connecting...', color: 'orange' },
-    connected: { text: 'Connected', color: 'green' },
-    disconnected: { text: 'Disconnected', color: 'red' },
-    error: { text: 'Connection Error', color: 'red' }
+    connecting: { text: 'Connecting...', color: connectedColor },
+    connected: { text: 'Connected', color: connectedColor },
+    disconnected: { text: 'Disconnected', color: disconnectedColor },
+    error: { text: 'Connection Error', color: disconnectedColor }
   };
 
   const status = statusMap[connectionStatus];
@@ -20,8 +23,8 @@ const ConnectionStatus: React.FC = () => {
       style={{ backgroundColor: status.color }}
       title={status.text}
       aria-label={status.text}
+      role="status"
     >
-      <div className="status-dot" />
     </div>
   );
 };

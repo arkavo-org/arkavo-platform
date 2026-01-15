@@ -4,10 +4,10 @@
     border: 2px solid #333; /* Dark border */
     color: #ffffff; /* White text for contrast */
     border-radius: 8px; /* Slightly larger border radius */
-    padding: 20px; /* Increased padding for better spacing */
-    margin-left: 30%;
-    margin-right: 30%;
-    margin-bottom: 15px; /* More space between items */
+    padding: clamp(12px, 3vw, 20px); /* Responsive padding */
+    margin: 0 auto 15px; /* Centered spacing */
+    max-width: 900px;
+    width: 100%;
     transition: background-color 0.2s ease, box-shadow 0.2s ease, transform 0.1s ease;
 }
 
@@ -140,4 +140,17 @@
     padding: 10px; /* Add padding for better readability */
     background-color: #2a2a2a; /* Slightly lighter background for text */
     border: 1px solid #444; /* Add border to text content */
+}
+
+@media (max-width: 900px) {
+    .feed-item {
+        margin: 0 auto 12px;
+        padding: 14px;
+    }
+
+    .feed-item-content .content-image,
+    .content-text {
+        max-width: 100%;
+        width: 100%;
+    }
 }

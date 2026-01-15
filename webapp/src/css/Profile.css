@@ -207,3 +207,53 @@ textarea {
     margin: 0.25rem 0 0;
     color: rgba(255, 255, 255, 0.6);
   }
+
+.danger-zone {
+    grid-column: 1 / -1;
+    margin-top: 1.5rem;
+    padding: 1rem;
+    border: 1px solid rgba(255, 99, 99, 0.4);
+    border-radius: 12px;
+    background: rgba(255, 99, 99, 0.06);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+}
+
+.danger-title {
+    font-weight: 700;
+    color: #ff7676;
+}
+
+.danger-copy {
+    margin: 0.25rem 0 0.5rem;
+    color: rgba(255, 255, 255, 0.75);
+}
+
+.danger-error {
+    margin: 0;
+    color: #ffb1b1;
+    font-size: 0.9rem;
+}
+
+.delete-btn {
+    background: linear-gradient(135deg, #ff5c5c, #d93636);
+    color: white;
+    border: none;
+    border-radius: 12px;
+    padding: 0.65rem 1.25rem;
+    font-weight: 700;
+    cursor: pointer;
+    min-width: 160px;
+    transition: opacity 0.2s ease, transform 0.2s ease;
+}
+
+.delete-btn:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+}
+
+.delete-btn:hover:not(:disabled) {
+    transform: translateY(-1px);
+}

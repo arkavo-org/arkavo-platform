@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useMemo } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import "../css/global.css";
@@ -92,6 +92,11 @@ const ChatPage: React.FC = () => {
   const [peoplePool, setPeoplePool] = useState<PersonEntry[]>([]);
   const [visiblePeople, setVisiblePeople] = useState<PersonEntry[]>([]);
   const [unreadRooms, setUnreadRooms] = useState<Record<string, boolean>>({});
+  const [isSidebarOpen, setSidebarOpen] = useState(false);
+  const placeholderRooms: Room[] = [
+    { id: "general", name: "General", is_public: true },
+    { id: "announcements", name: "Announcements", is_public: true },
+  ];
 
   const markRoomAsRead = useCallback((roomId?: string | null) => {
     if (!roomId) return;
@@ -122,12 +127,6 @@ const ChatPage: React.FC = () => {
     }
   }, [urlRoomId]);
 
-  useEffect(() => {
-    // Update URL when activeRoom changes (except initial load)
-    if (activeRoom && activeRoom !== urlRoomId) {
-      navigate(`/chat/${activeRoom}`, { replace: true });
-    }
-  }, [activeRoom, urlRoomId, navigate]);
   useEffect(() => {
     markRoomAsRead(activeRoom);
   }, [activeRoom, markRoomAsRead]);
@@ -250,6 +249,24 @@ const ChatPage: React.FC = () => {
       selectRandomPeople(peoplePool, keycloak?.tokenParsed?.sub)
     );
   }, [peoplePool, keycloak?.tokenParsed?.sub]);
+
+  const dmRooms = useMemo(() => {
+    if (!keycloak?.tokenParsed?.sub) return [];
+    const currentUserId = keycloak.tokenParsed.sub;
+    return userRooms
+      .filter(room => room.id.includes('_'))
+      .map(room => {
+        const otherUserId = getOtherUserId(room.id, currentUserId);
+        const profile = userProfiles[otherUserId];
+        return {
+          roomId: room.id,
+          otherUserId,
+          displayName: profile?.displayName || otherUserId,
+          picture: profile?.picture,
+        };
+      })
+      .filter(dm => dm.otherUserId !== currentUserId); // exclude self DM
+  }, [userRooms, userProfiles, keycloak?.tokenParsed?.sub]);
 
   useEffect(() => {
     if (!ws) return;
@@ -386,10 +403,11 @@ const ChatPage: React.FC = () => {
       if (roomId.includes("_")) {
         await ensureRoomExists(roomId);
       }
+      navigate(`/chat/${roomId}`);
       setActiveRoom(roomId);
       markRoomAsRead(roomId);
       setShowExplore(false);
-      // URL update will be handled by the effect above
+      setSidebarOpen(false);
 
       if (roomId.includes("_") && keycloak?.tokenParsed?.sub) {
         const otherUserId = getOtherUserId(roomId, keycloak.tokenParsed.sub);
@@ -410,35 +428,35 @@ const ChatPage: React.FC = () => {
 
   return (
     <div className="chat-page">
-      <div className="sidebar">
+      <div className={`sidebar ${isSidebarOpen ? "open" : ""}`}>
         <div className="people-list">
           <h2>People</h2>
-          {visiblePeople.length > 0 ? (
-            visiblePeople.map((person) => (
+          {dmRooms.length > 0 ? (
+            dmRooms.map((dm) => (
               <div
-                key={person.userId}
+                key={dm.roomId}
                 className="person-item"
-                onClick={() => handleRoomSelect(person.roomId)}
+                onClick={() => handleRoomSelect(dm.roomId)}
               >
-                {person.picture ? (
+                {dm.picture ? (
                   <img
                     src={
-                      person.picture.startsWith("data:")
-                        ? person.picture
-                        : `data:image/jpeg;base64,${person.picture}`
+                      dm.picture.startsWith("data:")
+                        ? dm.picture
+                        : `data:image/jpeg;base64,${dm.picture}`
                     }
-                    alt={person.displayName}
+                    alt={dm.displayName}
                   />
                 ) : (
                   <div className="person-avatar-fallback">
-                    {person.displayName.charAt(0).toUpperCase()}
+                    {dm.displayName.charAt(0).toUpperCase()}
                   </div>
                 )}
                 <div className="person-meta">
-                  <div className="person-name">{person.displayName}</div>
-                  <div className="person-id">{person.userId}</div>
+                  <div className="person-name">{dm.displayName}</div>
+                  <div className="person-id">{dm.otherUserId}</div>
                 </div>
-                {unreadRooms[person.roomId] && (
+                {unreadRooms[dm.roomId] && (
                   <span className="room-alert" title="Unread messages">
                     !
                   </span>
@@ -469,20 +487,87 @@ const ChatPage: React.FC = () => {
           ))}
         </div>
         <div className="room-actions">
-          <button className="add-room" onClick={() => setShowExplore(true)}>
+          <button
+            className="add-room"
+            onClick={() => {
+              setShowExplore(true);
+              setSidebarOpen(false);
+            }}
+          >
             Explore Rooms
           </button>
-          <button className="add-room" onClick={handleCreateRoom}>
+          <button
+            className="add-room"
+            onClick={() => {
+              handleCreateRoom();
+              setSidebarOpen(false);
+            }}
+          >
             Create Room
           </button>
         </div>
       </div>
+      <div
+        className={`sidebar-overlay ${isSidebarOpen ? "open" : ""}`}
+        onClick={() => setSidebarOpen(false)}
+      />
       <div className="chat-area">
+        <div className="mobile-sidebar-toggle">
+          <button onClick={() => setSidebarOpen((prev) => !prev)}>
+            People &amp; Rooms
+          </button>
+        </div>
         {showExplore && <ExploreRooms onRoomSelect={handleRoomSelect} />}
         {!showExplore && activeRoom && <Room roomId={activeRoom} />}
         {!showExplore && !activeRoom && (
           <div className="select-room">
-            <h3>Select a room to start chatting</h3>
+            <div className="suggestions">
+              <div className="suggestions-header">People</div>
+              <div className="suggestions-list">
+                {visiblePeople.map((person) => (
+                  <div
+                    key={person.userId}
+                    className="suggestion-card"
+                    onClick={() => handleRoomSelect(person.roomId)}
+                  >
+                    <div className="suggestion-avatar">
+                      {(person.picture && (
+                        <img
+                          src={
+                            person.picture.startsWith("data:")
+                              ? person.picture
+                              : `data:image/jpeg;base64,${person.picture}`
+                          }
+                          alt={person.displayName}
+                        />
+                      )) || (
+                        <span>{person.displayName.charAt(0).toUpperCase()}</span>
+                      )}
+                    </div>
+                    <div>
+                      <div className="suggestion-name">{person.displayName}</div>
+                      <div className="suggestion-meta">{person.userId}</div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+              <div className="suggestions-header">Rooms</div>
+              <div className="suggestions-list">
+                {(userRooms.length ? userRooms.filter((r) => !r.id.includes("_")) : placeholderRooms).map((room) => (
+                  <div
+                    key={room.id}
+                    className="suggestion-card"
+                    onClick={() => handleRoomSelect(room.id)}
+                  >
+                    <div className="suggestion-avatar room">{room.name.charAt(0).toUpperCase()}</div>
+                    <div>
+                      <div className="suggestion-name">{room.name}</div>
+                      <div className="suggestion-meta">{room.is_public ? "Public room" : "Private room"}</div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
           </div>
         )}
       </div>

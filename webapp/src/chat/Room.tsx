@@ -4,8 +4,6 @@ import {
   getMessagesFromDB, 
   clearMessagesForRoom 
 } from "./indexedDBUtils";
-import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
-import { faInfoCircle } from "@fortawesome/free-solid-svg-icons";
 import { useAuth } from "../context/AuthContext";
 import { useWebSocket } from "../context/WebSocketContext";
 import type { NanoTDFDatasetClient } from "@opentdf/sdk";
@@ -31,6 +29,17 @@ const Room: React.FC<RoomProps> = ({ roomId }) => {
   const [tdfStatus, setTdfStatus] = useState<
     "loading" | "ready" | "unavailable"
   >("loading");
+  const [roomMeta, setRoomMeta] = useState<{ name?: string; is_public?: boolean; picture?: string }>({});
+  const [dmProfile, setDmProfile] = useState<{ display_name?: string; picture?: string; userId?: string } | null>(null);
+  const [isMember, setIsMember] = useState(false);
+  const [showRoomInfoModal, setShowRoomInfoModal] = useState(false);
+  const [roomInfo, setRoomInfo] = useState<{
+    name: string;
+    is_public: number;
+    creator?: string;
+    admins?: string[];
+    picture?: string;
+  } | null>(null);
 
   useEffect(() => {
     if (tdfClient) {
@@ -41,21 +50,6 @@ const Room: React.FC<RoomProps> = ({ roomId }) => {
       setTdfStatus("unavailable");
     }
   }, [tdfClient]);
-
-  useEffect(() => {
-    if (roomId && tdfStatus === "ready") {
-      console.log(`Loading messages for room: ${roomId}`);
-      setMessages([]);
-      fetchMessages(); // now tdfClient is guaranteed available
-    }
-
-    return () => {
-      // Cleanup when room changes
-      if (roomId) {
-        clearMessagesForRoom(roomId);
-      }
-    };
-  }, [roomId, tdfStatus]);
 
   const fetchProfile = useCallback(
     async (userId: string) => {
@@ -97,6 +91,62 @@ const Room: React.FC<RoomProps> = ({ roomId }) => {
     [keycloak, profiles]
   );
   const [expandedImage, setExpandedImage] = useState<string | null>(null);
+  const fetchRoomMeta = useCallback(async () => {
+    if (!keycloak?.token || !roomId) return;
+    try {
+      if (keycloak.isTokenExpired()) {
+        await keycloak.updateToken(30);
+      }
+      const response = await fetch(
+        `${import.meta.env.VITE_USERS_API_URL}/rooms/${roomId}`,
+        {
+          headers: {
+            Authorization: `Bearer ${keycloak.token}`,
+          },
+        }
+      );
+      if (response.ok) {
+        const data = await response.json();
+        const hasPicture = Boolean(
+          data.picture ||
+          data.image ||
+          data.room_image ||
+          data.photo ||
+          data.avatar
+        );
+        console.debug("Room meta fetched", {
+          id: roomId,
+          hasPicture,
+          keys: Object.keys(data || {}),
+        });
+        const picture =
+          data.picture ||
+          data.image ||
+          data.room_image ||
+          data.photo ||
+          data.avatar;
+        setRoomMeta({ name: data.name, is_public: data.is_public, picture });
+      }
+    } catch (err) {
+      console.error("Failed to fetch room meta", err);
+    }
+  }, [keycloak, roomId]);
+
+  useEffect(() => {
+    if (roomId && tdfStatus === "ready") {
+      console.log(`Loading messages for room: ${roomId}`);
+      setMessages([]);
+      fetchMessages(); // now tdfClient is guaranteed available
+      fetchRoomMeta();
+    }
+
+    return () => {
+      // Cleanup when room changes
+      if (roomId) {
+        clearMessagesForRoom(roomId);
+      }
+    };
+  }, [roomId, tdfStatus, fetchRoomMeta]);
   // WebSocket connection is now managed at ChatPage level
   const { ws, connectionStatus } = useWebSocket();
   const connectionStatusText: Record<
@@ -109,6 +159,26 @@ const Room: React.FC<RoomProps> = ({ roomId }) => {
     error: "Connection Error",
   };
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const [roomPartner, setRoomPartner] = useState<{ displayName: string; picture?: string } | null>(null);
+
+  useEffect(() => {
+    if (!roomInfo) return;
+    const picture =
+      roomInfo.picture ||
+      (roomInfo as any).image ||
+      (roomInfo as any).room_image ||
+      (roomInfo as any).photo ||
+      (roomInfo as any).avatar;
+    console.debug("Room info merged into meta", {
+      id: roomId,
+      hasPicture: Boolean(picture),
+    });
+    setRoomMeta((prev) => ({
+      name: roomInfo.name ?? prev.name,
+      is_public: roomInfo.is_public ?? prev.is_public,
+      picture: picture ?? prev.picture,
+    }));
+  }, [roomInfo]);
 
   const decryptTDFMessage = async (content: any) => {
     if (tdfStatus !== "ready") {
@@ -209,6 +279,34 @@ const Room: React.FC<RoomProps> = ({ roomId }) => {
     };
   }, [ws, roomId, profiles, fetchProfile]);
 
+  useEffect(() => {
+    // For DM rooms, infer the other participant
+    if (!roomId?.includes("_") || !keycloak?.tokenParsed?.sub) {
+      setRoomPartner(null);
+      return;
+    }
+    const [a, b] = roomId.split("_");
+    const otherId = a === keycloak.tokenParsed.sub ? b : a;
+    if (!otherId) return;
+    const existing = profiles[otherId];
+    if (existing) {
+      setRoomPartner({
+        displayName: existing.display_name,
+        picture: existing.picture,
+      });
+    } else {
+      fetchProfile(otherId).then(() => {
+        const next = profiles[otherId];
+        if (next) {
+          setRoomPartner({
+            displayName: next.display_name,
+            picture: next.picture,
+          });
+        }
+      });
+    }
+  }, [roomId, keycloak?.tokenParsed?.sub, profiles, fetchProfile]);
+
   // Update WebSocket auth when token changes
   useEffect(() => {
     if (ws && ws.readyState === WebSocket.OPEN) {
@@ -281,15 +379,6 @@ const Room: React.FC<RoomProps> = ({ roomId }) => {
     }
   };
 
-  const [isMember, setIsMember] = useState(false);
-  const [showRoomInfoModal, setShowRoomInfoModal] = useState(false);
-  const [roomInfo, setRoomInfo] = useState<{
-    name: string;
-    is_public: number;
-    creator?: string;
-    admins?: string[];
-  } | null>(null);
-
   useEffect(() => {
     const checkRoomMembership = async () => {
       if (!keycloak?.tokenParsed?.sub || !keycloak?.authenticated) return;
@@ -348,6 +437,18 @@ const Room: React.FC<RoomProps> = ({ roomId }) => {
 
       if (response.ok) {
         const data = await response.json();
+        const hasPicture = Boolean(
+          data.picture ||
+          (data as any).image ||
+          (data as any).room_image ||
+          (data as any).photo ||
+          (data as any).avatar
+        );
+        console.debug("Room info fetched", {
+          id: roomId,
+          hasPicture,
+          keys: Object.keys(data || {}),
+        });
         setRoomInfo(data);
       } else {
         console.error("Failed to fetch room info:", response.status);
@@ -357,7 +458,7 @@ const Room: React.FC<RoomProps> = ({ roomId }) => {
     }
   };
 
-  const handleRoomInfoClick = async () => {
+  const openRoomInfo = async () => {
     await fetchRoomInfo();
     setShowRoomInfoModal(true);
   };
@@ -439,6 +540,60 @@ const Room: React.FC<RoomProps> = ({ roomId }) => {
 
   return (
     <div className="room-content">
+      <div className="room-mobile-header">
+        <div
+          className="room-chip"
+          role="button"
+          tabIndex={0}
+          onClick={openRoomInfo}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" || e.key === " ") {
+              e.preventDefault();
+              openRoomInfo();
+            }
+          }}
+          aria-label="Room information"
+        >
+          <div className="chip-avatar">
+            {(() => {
+              const avatarImage = roomId.includes("_")
+                ? roomPartner?.picture
+                : roomInfo?.picture ||
+                  (roomInfo as any)?.image ||
+                  (roomInfo as any)?.room_image ||
+                  (roomInfo as any)?.photo ||
+                  (roomInfo as any)?.avatar ||
+                  roomMeta.picture;
+
+              if (avatarImage) {
+                const src = avatarImage.startsWith("data:")
+                  ? avatarImage
+                  : `data:image/jpeg;base64,${avatarImage}`;
+                return <img src={src} alt={roomMeta.name || roomId} />;
+              }
+
+              const fallbackText = roomId.includes("_")
+                ? (roomPartner?.displayName || roomId).charAt(0).toUpperCase()
+                : (roomInfo?.name || roomMeta.name || roomId).charAt(0).toUpperCase();
+              return <span>{fallbackText}</span>;
+            })()}
+          </div>
+          <div className="chip-text">
+            <div className="chip-title">
+              {roomId.includes("_")
+                ? roomPartner?.displayName || roomId
+                : roomInfo?.name || roomMeta.name || roomId}
+            </div>
+            <div className="chip-sub">
+              {roomId.includes("_")
+                ? "Direct Message"
+                : (roomInfo?.is_public ?? roomMeta.is_public)
+                ? "Public room"
+                : "Private room"}
+            </div>
+          </div>
+        </div>
+      </div>
       {expandedImage && (
         <div
           className="image-expanded-overlay"
@@ -474,9 +629,6 @@ const Room: React.FC<RoomProps> = ({ roomId }) => {
       )}
 
       <div className="message-area">
-        <button onClick={handleRoomInfoClick} className="room-info-button">
-          <FontAwesomeIcon icon={faInfoCircle} />
-        </button>
         {messages
           .sort(
             (a, b) =>

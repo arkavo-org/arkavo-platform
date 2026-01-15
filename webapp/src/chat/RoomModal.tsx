@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useAuth } from '../context/AuthContext';
+import ImageEditorModal from '../components/ImageEditorModal';
 
 interface RoomModalProps {
   roomId: string;
@@ -8,6 +9,7 @@ interface RoomModalProps {
     is_public: number;
     creator?: string;
     admins?: string[];
+    picture?: string;
   } | null;
   profiles: {[key: string]: {display_name: string, picture: string}};
   onClose: () => void;
@@ -40,7 +42,8 @@ const RoomModal: React.FC<RoomModalProps> = ({
   const isDmRoom = useMemo(() => roomId.includes("_"), [roomId]);
   const [editedRoomInfo, setEditedRoomInfo] = useState({
     name: roomInfo?.name || '',
-    is_public: roomInfo?.is_public || 0
+    is_public: roomInfo?.is_public || 0,
+    picture: roomInfo?.picture || ''
   });
   const [members, setMembers] = useState<MemberProfile[]>([]);
   const [membersError, setMembersError] = useState<string | null>(null);
@@ -52,6 +55,10 @@ const RoomModal: React.FC<RoomModalProps> = ({
   const [removingMemberId, setRemovingMemberId] = useState<string | null>(null);
   const [promotingMemberId, setPromotingMemberId] = useState<string | null>(null);
   const [demotingMemberId, setDemotingMemberId] = useState<string | null>(null);
+  const [showImageEditor, setShowImageEditor] = useState(false);
+  const [imageToEdit, setImageToEdit] = useState<string | null>(null);
+  const [savingImage, setSavingImage] = useState(false);
+  const [roomImageError, setRoomImageError] = useState<string | null>(null);
   const isAdmin = Boolean(
     !isDmRoom && roomInfo?.admins?.includes(currentUserId || '')
   );
@@ -81,7 +88,9 @@ const RoomModal: React.FC<RoomModalProps> = ({
             "Content-Type": "application/json",
             Authorization: `Bearer ${keycloak.token}`,
           },
-          body: JSON.stringify(editedRoomInfo),
+          body: JSON.stringify({
+            ...editedRoomInfo,
+          }),
         }
       );
 
@@ -151,8 +160,9 @@ const RoomModal: React.FC<RoomModalProps> = ({
     setEditedRoomInfo({
       name: roomInfo?.name || '',
       is_public: roomInfo?.is_public || 0,
+      picture: roomInfo?.picture || '',
     });
-  }, [roomInfo?.name, roomInfo?.is_public]);
+  }, [roomInfo?.name, roomInfo?.is_public, roomInfo?.picture]);
 
   useEffect(() => {
     fetchRoomMembers();
@@ -413,12 +423,108 @@ const RoomModal: React.FC<RoomModalProps> = ({
     );
   };
 
+  const roomImageBase =
+    editedRoomInfo.picture ||
+    roomInfo?.picture ||
+    (roomInfo as any)?.image ||
+    (roomInfo as any)?.room_image ||
+    (roomInfo as any)?.photo ||
+    (roomInfo as any)?.avatar;
+  const roomImageSrc = roomImageBase
+    ? roomImageBase.startsWith('data:')
+      ? roomImageBase
+      : `data:image/jpeg;base64,${roomImageBase}`
+    : '/assets/dummy-image.jpg';
+
+  const handleRoomImageSave = async (base64Image: string) => {
+    if (!keycloak?.token || !roomInfo || isDmRoom) return;
+    setSavingImage(true);
+    setRoomImageError(null);
+    try {
+      if (keycloak.isTokenExpired()) {
+        await keycloak.updateToken(30);
+      }
+
+      const response = await fetch(
+        `${import.meta.env.VITE_USERS_API_URL}/rooms/${roomId}`,
+        {
+          method: "PUT",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${keycloak.token}`,
+          },
+          body: JSON.stringify({
+            ...editedRoomInfo,
+            picture: base64Image,
+          }),
+        }
+      );
+
+      if (response.ok) {
+    setEditedRoomInfo((prev) => ({ ...prev, picture: base64Image }));
+        onRoomUpdated();
+      } else {
+        setRoomImageError('Failed to update room photo.');
+      }
+    } catch (error) {
+      console.error('Error updating room photo:', error);
+      setRoomImageError('Failed to update room photo.');
+    } finally {
+      setSavingImage(false);
+      setShowImageEditor(false);
+    }
+  };
+
+  const handleImageEditStart = () => {
+    if (!isAdmin || isDmRoom) return;
+    setImageToEdit(roomImageSrc);
+    setShowImageEditor(true);
+  };
+
+  const handleOverlayClick = () => {
+    if (showImageEditor) return;
+    onClose();
+  };
+
   return (
-    <div className="modal-overlay" onClick={onClose}>
+    <div className="modal-overlay" onClick={handleOverlayClick}>
+      {showImageEditor && imageToEdit && (
+        <ImageEditorModal
+          image={imageToEdit}
+          onClose={() => setShowImageEditor(false)}
+          onSave={handleRoomImageSave}
+        />
+      )}
       <div 
         className="room-info-modal"
         onClick={e => e.stopPropagation()}
       >
+        {!isDmRoom && (
+          <div
+            className={`room-hero ${isAdmin ? 'editable' : ''}`}
+            role={isAdmin ? 'button' : undefined}
+            tabIndex={isAdmin ? 0 : -1}
+            onClick={handleImageEditStart}
+            onKeyDown={(e) => {
+              if (!isAdmin) return;
+              if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault();
+                handleImageEditStart();
+              }
+            }}
+            aria-label={isAdmin ? 'Edit room photo' : 'Room photo'}
+          >
+            <img src={roomImageSrc} alt={roomInfo?.name || 'Room'} />
+            {isAdmin && (
+              <div className="room-hero-overlay">
+                {savingImage ? 'Saving…' : roomImageBase ? 'Edit photo' : 'Add photo'}
+              </div>
+            )}
+          </div>
+        )}
+        {roomImageError && (
+          <div className="room-image-error">{roomImageError}</div>
+        )}
         <h2>{isDmRoom ? "Direct Message" : "Room Information"}</h2>
         {isDmRoom ? (
           <>{renderDmSummary()}</>

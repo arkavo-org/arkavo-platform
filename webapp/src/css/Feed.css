@@ -10,7 +10,7 @@
 
 /* Outer container for the feed */
 .feed-container-outer {
-    padding: 0px;
+    padding: 0 12px;
     margin: 0 auto;
     height: 100%;
     box-sizing: border-box;
@@ -19,8 +19,8 @@
 
 /* Inner container to center and constrain width */
 .feed-container {
-    padding: 0;
-    /*max-width: 40%;(*/
+    padding: clamp(8px, 2vw, 16px);
+    max-width: 960px;
     margin: 0 auto;
     box-sizing: border-box;
 }
@@ -32,7 +32,7 @@
     }
 
     .feed-container {
-        max-width: 95%; /* Adjust container width for smaller screens */
-        padding: 10px;  /* Reduce padding to optimize space */
+        max-width: 100%; /* Adjust container width for smaller screens */
+        padding: 10px 8px;  /* Reduce padding to optimize space */
     }
 }

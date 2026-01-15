@@ -255,6 +255,26 @@ async def get_profile_by_uuid(
         "picture": profile_data.get("picture")
     }
 
+@app.delete("/users/{uuid}")
+async def delete_user(
+    uuid: str,
+    current_user: dict = Depends(get_current_user)
+):
+    """Delete the currently authenticated user's profile and notifications."""
+    requester_id = current_user.get("sub")
+    if not requester_id:
+        raise HTTPException(status_code=400, detail="Invalid token: missing user ID")
+    if requester_id != uuid:
+        raise HTTPException(status_code=403, detail="Cannot delete another user")
+
+    user_key = get_user_key(uuid)
+    notifications_key = get_notifications_key(uuid)
+
+    redis_client.delete(user_key)
+    redis_client.delete(notifications_key)
+
+    return {"message": "User deleted"}
+
 @app.get("/people")
 async def list_people(current_user: dict = Depends(get_current_user)):
     """Return a list of all user profiles for discovery."""

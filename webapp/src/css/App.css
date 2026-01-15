@@ -1,13 +1,14 @@
 
 #fullpage{
   width: 100vw;
-  height: 100vh;
+  min-height: 100vh;
   padding: 0;
-  padding-top: 70px;
+  padding-top: var(--navbar-height, 70px);
   display: flex;
   flex-direction: column;
   box-sizing: border-box;
-  overflow: hidden;
+  overflow-x: hidden;
+  overflow-y: auto;
   background-color: #1a1a1a;
 }
 
@@ -47,6 +48,12 @@ body.chat-page-locked {
   overflow: hidden;
 }
 
+/* Allow scrolling on small devices even when chat-page-locked is applied */
+@media (max-width: 900px) {
+  body.chat-page-locked {
+    overflow: auto;
+  }
+}
 
 /* Dark mode styles */
 body.dark-mode {

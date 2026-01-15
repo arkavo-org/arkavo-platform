@@ -16,6 +16,8 @@ const Profile: React.FC<ProfileProps> = ({ isModal = false, onClose = () => {} }
   );
   const [showImageEditor, setShowImageEditor] = useState(false);
   const [selectedImage, setSelectedImage] = useState<string | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -167,6 +169,52 @@ const Profile: React.FC<ProfileProps> = ({ isModal = false, onClose = () => {} }
       onClose(); // Close modal after successful save
     } catch (err) {
       console.error("Error saving profile:", err);
+    }
+  };
+
+  const handleDeleteAccount = async () => {
+    if (!keycloak?.token) return;
+    const userId = keycloak.tokenParsed?.sub;
+    if (!userId) {
+      setDeleteError("Missing user id in token");
+      return;
+    }
+    const confirmed = window.confirm(
+      "Delete your account? This cannot be undone and will remove your profile."
+    );
+    if (!confirmed) return;
+
+    try {
+      setIsDeleting(true);
+      setDeleteError(null);
+      if (keycloak.isTokenExpired()) {
+        await keycloak.updateToken(30);
+      }
+      const response = await fetch(
+        `${import.meta.env.VITE_USERS_API_URL}/users/${userId}`,
+        {
+          method: "DELETE",
+          headers: {
+            Authorization: `Bearer ${keycloak.token}`,
+          },
+        }
+      );
+
+      if (!response.ok) {
+        const message = await response.text();
+        throw new Error(message || "Failed to delete account");
+      }
+
+      // After deletion, log out the user
+      const returnUrl = window.location.origin;
+      await keycloak.logout({ redirectUri: returnUrl });
+    } catch (err) {
+      console.error("Error deleting account:", err);
+      setDeleteError(
+        err instanceof Error ? err.message : "Failed to delete account"
+      );
+    } finally {
+      setIsDeleting(false);
     }
   };
 
@@ -325,6 +373,25 @@ const Profile: React.FC<ProfileProps> = ({ isModal = false, onClose = () => {} }
                   }}
                 >
                   Logout
+                </button>
+              </div>
+              <div className="danger-zone">
+                <div>
+                  <div className="danger-title">Delete account</div>
+                  <p className="danger-copy">
+                    Permanently remove your profile and data. This cannot be undone.
+                  </p>
+                  {deleteError && (
+                    <p className="danger-error">{deleteError}</p>
+                  )}
+                </div>
+                <button
+                  type="button"
+                  className="delete-btn"
+                  onClick={handleDeleteAccount}
+                  disabled={isDeleting}
+                >
+                  {isDeleting ? "Deleting..." : "Delete account"}
                 </button>
               </div>
             </div>
