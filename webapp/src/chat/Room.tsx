@@ -173,9 +173,13 @@ const Room: React.FC<RoomProps> = ({ roomId }) => {
       id: roomId,
       hasPicture: Boolean(picture),
     });
+    const isPublic =
+      typeof roomInfo.is_public === "number"
+        ? roomInfo.is_public === 1
+        : roomInfo.is_public;
     setRoomMeta((prev) => ({
       name: roomInfo.name ?? prev.name,
-      is_public: roomInfo.is_public ?? prev.is_public,
+      is_public: isPublic ?? prev.is_public,
       picture: picture ?? prev.picture,
     }));
   }, [roomInfo]);

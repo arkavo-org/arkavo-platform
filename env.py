@@ -20,6 +20,7 @@ webapp_dir = os.path.join(current_dir, "webapp")
 worldchat_dir = os.path.join(current_dir, "users", "worldchat")
 levatel_dir = os.path.join(current_dir, "..", "CodeCollective")
 org_dir = os.path.join(current_dir, "org")
+static_dir = os.path.join(current_dir, "static")
 certs_dir = os.path.join(current_dir, "certs")
 keys_dir = os.path.join(certs_dir, "keys")
 synapse_dir = os.path.join(current_dir, "synapse")
@@ -77,6 +78,7 @@ WEBAPP_DEV_BASE_URL = "dev." + USER_WEBSITE
 INITIATIVE_BASE_URL = "initiative." + BACKEND_LOCATION
 GITEA_BASE_URL = "gitea." + BACKEND_LOCATION
 WHISPER_BASE_URL = "whisper." + BACKEND_LOCATION
+STATIC_BASE_URL = "static." + BACKEND_LOCATION
 USERS_BASE_URL = "users." + BACKEND_LOCATION
 BALLOT_BASE_URL = "ballot." + BACKEND_LOCATION
 NEXTCLOUD_BASE_URL = "nextcloud." + BACKEND_LOCATION
@@ -315,6 +317,10 @@ nginx = dict(
         },
         os.path.join(webapp_dir, "dist"): {
             "bind": "/app",
+            "mode": "rw",
+        },
+        static_dir: {
+            "bind": "/static",
             "mode": "rw",
         },
         levatel_dir: {
