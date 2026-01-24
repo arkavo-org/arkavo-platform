@@ -32,11 +32,7 @@ const initializeAuth = async (): Promise<boolean> => {
       enableLogging: true,
       silentCheckSsoRedirectUri: window.location.origin + '/silent-check-sso.html'
     });
-    if (!authenticated) {
-      await keycloak.login();
-      return true;
-    }
-    return true;
+    return authenticated;
   } catch (error) {
     console.error("Keycloak initialization failed:", error);
     return false;
@@ -345,11 +341,13 @@ const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     setIsLoading(true);
     try {
       const authenticated = await initializeAuth();
-      setIsAuthenticated(authenticated);
-      if (authenticated) {
-        const profile = await getUserProfile();
-        setUserProfile(profile);
+      if (!authenticated) {
+        await keycloak.login();
+        return;
       }
+      setIsAuthenticated(true);
+      const profile = await getUserProfile();
+      setUserProfile(profile);
     } catch (error) {
       console.error('Login error:', error);
     } finally {

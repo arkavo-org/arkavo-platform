@@ -26,6 +26,10 @@ const Room: React.FC<RoomProps> = ({ roomId }) => {
   const [profiles, setProfiles] = useState<{
     [key: string]: { display_name: string; picture: string };
   }>({});
+  const [openMenuMessageId, setOpenMenuMessageId] = useState<string | null>(null);
+  const [editingMessageId, setEditingMessageId] = useState<string | null>(null);
+  const [editDraft, setEditDraft] = useState<string>("");
+  const [messageActionError, setMessageActionError] = useState<string | null>(null);
   const [tdfStatus, setTdfStatus] = useState<
     "loading" | "ready" | "unavailable"
   >("loading");
@@ -40,6 +44,8 @@ const Room: React.FC<RoomProps> = ({ roomId }) => {
     admins?: string[];
     picture?: string;
   } | null>(null);
+  const messageAreaRef = useRef<HTMLDivElement>(null);
+  const shouldAutoScrollRef = useRef(true);
 
   useEffect(() => {
     if (tdfClient) {
@@ -79,7 +85,7 @@ const Room: React.FC<RoomProps> = ({ roomId }) => {
           setProfiles((prev) => ({
             ...prev,
             [userId]: {
-              display_name: data.display_name || userId,
+              display_name: data.display_name || "Unknown user",
               picture: data.picture || "",
             },
           }));
@@ -236,6 +242,7 @@ const Room: React.FC<RoomProps> = ({ roomId }) => {
 
       const processedMessage = {
         ...message,
+        content_uuid: message.content_uuid || content?.uuid,
         encrypted,
         content,
         attachments: message.attachments?.map((att: any) => ({
@@ -263,6 +270,40 @@ const Room: React.FC<RoomProps> = ({ roomId }) => {
       try {
         const message = JSON.parse(event.data);
         if (message.roomId !== roomId) return;
+
+        if (message.type === "message_edit") {
+          const processedMessage = await processMessage({
+            ...message,
+            content: message.content,
+            content_uuid: message.message_id,
+          });
+          setMessages((prev) =>
+            prev.map((msg) => {
+              const msgId = msg.content?.uuid || msg.content_uuid;
+              if (msgId !== message.message_id) {
+                return msg;
+              }
+              return {
+                ...msg,
+                content: processedMessage.content,
+                encrypted: processedMessage.encrypted,
+                content_uuid: message.message_id,
+                edited_at: message.edited_at,
+              };
+            })
+          );
+          return;
+        }
+
+        if (message.type === "message_delete") {
+          setMessages((prev) =>
+            prev.filter((msg) => {
+              const msgId = msg.content?.uuid || msg.content_uuid;
+              return msgId !== message.message_id;
+            })
+          );
+          return;
+        }
 
         const processedMessage = await processMessage(message);
         if (processedMessage.sender && processedMessage.timestamp) {
@@ -471,6 +512,30 @@ const Room: React.FC<RoomProps> = ({ roomId }) => {
     await fetchRoomInfo();
   };
 
+  const buildMessagePayload = async (
+    text: string,
+    attachments: Array<{ data: string; mimeType: string }> | undefined,
+    messageId: string
+  ) => {
+    const contentDict: any = {
+      uuid: messageId,
+      text,
+      ...(attachments && attachments.length > 0 && { attachments }),
+    };
+    const contentString = JSON.stringify(contentDict);
+    if (roomInfo?.is_public) {
+      return contentString;
+    }
+    if (!tdfClient) {
+      throw new Error("Encryption unavailable");
+    }
+    const encryptedBuffer = await tdfClient.encrypt(contentString);
+    const binary = Array.from(new Uint8Array(encryptedBuffer))
+      .map((byte) => String.fromCharCode(byte))
+      .join("");
+    return btoa(binary);
+  };
+
   const GetRoomCreateIfDNE = useCallback(
     async (roomId: string) => {
       try {
@@ -525,6 +590,166 @@ const Room: React.FC<RoomProps> = ({ roomId }) => {
     }
   };
 
+  useEffect(() => {
+    const handleDocumentClick = () => {
+      setOpenMenuMessageId(null);
+    };
+    document.addEventListener("click", handleDocumentClick);
+    return () => {
+      document.removeEventListener("click", handleDocumentClick);
+    };
+  }, []);
+
+  const getMessageId = (msg: any) =>
+    msg?.content?.uuid || msg?.content_uuid || null;
+
+  const handleStartEdit = (msg: any) => {
+    const messageId = getMessageId(msg);
+    if (!messageId) return;
+    setEditingMessageId(messageId);
+    setEditDraft(msg?.content?.text || "");
+    setOpenMenuMessageId(null);
+    setMessageActionError(null);
+  };
+
+  const handleCancelEdit = () => {
+    setEditingMessageId(null);
+    setEditDraft("");
+  };
+
+  const handleSaveEdit = async (msg: any) => {
+    const messageId = getMessageId(msg);
+    if (!messageId || !keycloak?.token) return;
+    if (!roomInfo) {
+      setMessageActionError("Room info not loaded.");
+      return;
+    }
+    setMessageActionError(null);
+    const attachments = Array.isArray(msg?.content?.attachments)
+      ? msg.content.attachments.map((att: any) => ({
+          data: att.data,
+          mimeType: att.mimeType,
+        }))
+      : undefined;
+    try {
+      if (keycloak.isTokenExpired()) {
+        await keycloak.updateToken(30);
+      }
+      const contentPayload = await buildMessagePayload(
+        editDraft,
+        attachments,
+        messageId
+      );
+      const response = await fetch(
+        `${import.meta.env.VITE_USERS_API_URL}/rooms/${roomId}/messages/${messageId}`,
+        {
+          method: "PATCH",
+          headers: {
+            Authorization: `Bearer ${keycloak.token}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({ content: contentPayload }),
+        }
+      );
+      if (!response.ok) {
+        throw new Error("Failed to update message");
+      }
+      setMessages((prev) =>
+        prev.map((item) => {
+          const itemId = getMessageId(item);
+          if (itemId !== messageId) {
+            return item;
+          }
+          return {
+            ...item,
+            content: {
+              ...item.content,
+              text: editDraft,
+              uuid: messageId,
+              ...(attachments ? { attachments } : {}),
+            },
+            content_uuid: messageId,
+            edited_at: new Date().toISOString(),
+          };
+        })
+      );
+      setEditingMessageId(null);
+      setEditDraft("");
+    } catch (error) {
+      console.error("Failed to edit message:", error);
+      setMessageActionError("Could not edit this message.");
+    }
+  };
+
+  const handleDeleteMessage = async (msg: any) => {
+    const messageId = getMessageId(msg);
+    if (!messageId || !keycloak?.token) return;
+    const confirmed = window.confirm("Delete this message?");
+    if (!confirmed) return;
+    setMessageActionError(null);
+    try {
+      if (keycloak.isTokenExpired()) {
+        await keycloak.updateToken(30);
+      }
+      const response = await fetch(
+        `${import.meta.env.VITE_USERS_API_URL}/rooms/${roomId}/messages/${messageId}`,
+        {
+          method: "DELETE",
+          headers: {
+            Authorization: `Bearer ${keycloak.token}`,
+          },
+        }
+      );
+      if (!response.ok) {
+        throw new Error("Failed to delete message");
+      }
+      setMessages((prev) =>
+        prev.filter((item) => getMessageId(item) !== messageId)
+      );
+      if (editingMessageId === messageId) {
+        handleCancelEdit();
+      }
+    } catch (error) {
+      console.error("Failed to delete message:", error);
+      setMessageActionError("Could not delete this message.");
+    }
+  };
+
+  const handleReportMessage = async (msg: any) => {
+    const messageId = getMessageId(msg);
+    if (!messageId || !keycloak?.token || !msg?.sender) return;
+    const reason = window.prompt("Report reason (optional):");
+    if (reason === null) return;
+    setMessageActionError(null);
+    try {
+      if (keycloak.isTokenExpired()) {
+        await keycloak.updateToken(30);
+      }
+      const response = await fetch(
+        `${import.meta.env.VITE_USERS_API_URL}/users/${msg.sender}/report`,
+        {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${keycloak.token}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            room_id: roomId,
+            reason: reason || "",
+            message_id: messageId,
+          }),
+        }
+      );
+      if (!response.ok) {
+        throw new Error("Failed to report message");
+      }
+      setMessageActionError("Report submitted.");
+    } catch (error) {
+      console.error("Failed to report message:", error);
+      setMessageActionError("Could not submit report.");
+    }
+  };
+
   // Load room info when roomId or authentication changes
   useEffect(() => {
     if (keycloak?.authenticated) {
@@ -533,14 +758,27 @@ const Room: React.FC<RoomProps> = ({ roomId }) => {
   }, [roomId, keycloak?.authenticated]);
 
   const scrollToBottom = useCallback(() => {
+    if (!shouldAutoScrollRef.current) return;
     if (messagesEndRef.current) {
       messagesEndRef.current.scrollIntoView({ behavior: "smooth" });
     }
   }, []);
 
+  const handleMessageAreaScroll = useCallback(() => {
+    const area = messageAreaRef.current;
+    if (!area) return;
+    const distanceFromBottom =
+      area.scrollHeight - area.scrollTop - area.clientHeight;
+    shouldAutoScrollRef.current = distanceFromBottom < 80;
+  }, []);
+
   useEffect(() => {
     scrollToBottom();
   }, [messages, roomId, scrollToBottom]);
+
+  useEffect(() => {
+    shouldAutoScrollRef.current = true;
+  }, [roomId]);
 
   return (
     <div className="room-content">
@@ -632,7 +870,11 @@ const Room: React.FC<RoomProps> = ({ roomId }) => {
         />
       )}
 
-      <div className="message-area">
+      <div
+        className="message-area"
+        ref={messageAreaRef}
+        onScroll={handleMessageAreaScroll}
+      >
         {messages
           .sort(
             (a, b) =>
@@ -640,6 +882,67 @@ const Room: React.FC<RoomProps> = ({ roomId }) => {
           )
           .map((msg, index) => (
             <div key={index} className={`message-item ${msg.encrypted ? "decrypted" : ""}`}>
+              {(() => {
+                const messageId = getMessageId(msg);
+                const isOwn = msg.sender === keycloak?.tokenParsed?.sub;
+                if (!messageId) return null;
+                return (
+                  <div className="message-menu-wrapper">
+                    <button
+                      type="button"
+                      className="message-menu-button"
+                      aria-label="Message actions"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setOpenMenuMessageId((prev) =>
+                          prev === messageId ? null : messageId
+                        );
+                        setMessageActionError(null);
+                      }}
+                    >
+                      ⋯
+                    </button>
+                    {openMenuMessageId === messageId && (
+                      <div
+                        className="message-menu"
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        {isOwn ? (
+                          <>
+                            <button
+                              type="button"
+                              className="message-menu-item"
+                              onClick={() => handleStartEdit(msg)}
+                            >
+                              Edit message
+                            </button>
+                            <button
+                              type="button"
+                              className="message-menu-item danger"
+                              onClick={() => handleDeleteMessage(msg)}
+                            >
+                              Delete message
+                            </button>
+                          </>
+                        ) : (
+                          <button
+                            type="button"
+                            className="message-menu-item danger"
+                            onClick={() => handleReportMessage(msg)}
+                          >
+                            Report message
+                          </button>
+                        )}
+                        {messageActionError && (
+                          <div className="message-menu-status">
+                            {messageActionError}
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                );
+              })()}
               {profiles[msg.sender]?.picture ? (
                 <img
                   src={
@@ -678,16 +981,45 @@ const Room: React.FC<RoomProps> = ({ roomId }) => {
                   }}
                   style={{ cursor: "pointer" }}
                 >
-                  {(msg.sender || "?").charAt(0).toUpperCase()}
+                  {(
+                    profiles[msg.sender]?.display_name?.charAt(0) || "?"
+                  ).toUpperCase()}
                 </div>
               )}
               <div>
                 <div className="message-user">
                   {profiles[msg.sender]?.display_name || "Unknown"}
                 </div>
-                <div className="message-text">
-                  {msg.content.text}
-                </div>
+                {(() => {
+                  const messageId = getMessageId(msg);
+                  if (messageId && editingMessageId === messageId) {
+                    return (
+                      <div className="message-edit">
+                        <textarea
+                          value={editDraft}
+                          onChange={(e) => setEditDraft(e.target.value)}
+                        />
+                        <div className="message-edit-actions">
+                          <button
+                            type="button"
+                            className="message-edit-save"
+                            onClick={() => handleSaveEdit(msg)}
+                          >
+                            Save
+                          </button>
+                          <button
+                            type="button"
+                            className="message-edit-cancel"
+                            onClick={handleCancelEdit}
+                          >
+                            Cancel
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  }
+                  return <div className="message-text">{msg.content.text}</div>;
+                })()}
                 {msg.content?.attachments?.map((attachment: any, i: number) => {
                   const dataUrl =
                     attachment.dataUrl ||

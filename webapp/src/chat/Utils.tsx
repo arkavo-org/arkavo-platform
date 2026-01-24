@@ -59,7 +59,7 @@ export const fetchUserProfile = async (userId: string, token: string, synapseBas
     if (!response.ok) throw new Error('Failed to fetch user profile');
     const data = await response.json();
     return {
-        displayName: data.displayname || userId,
+        displayName: data.displayname || "Unknown user",
         avatarUrl: data.avatar_url || null,
     };
 };

@@ -205,6 +205,7 @@ const Profile: React.FC<ProfileProps> = ({ isModal = false, onClose = () => {} }
         throw new Error(message || "Failed to delete account");
       }
 
+      localStorage.removeItem("userProfile");
       // After deletion, log out the user
       const returnUrl = window.location.origin;
       await keycloak.logout({ redirectUri: returnUrl });

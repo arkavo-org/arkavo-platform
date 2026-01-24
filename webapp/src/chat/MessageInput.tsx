@@ -180,7 +180,7 @@ const MessageInput: React.FC<MessageInputProps> = ({
             "Content-Type": "application/json",
             Accept: "application/json",
           },
-          body: JSON.stringify({ content: message }),
+          body: JSON.stringify({ content: message, content_uuid: messageId }),
         }
       );
 

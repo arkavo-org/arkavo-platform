@@ -56,13 +56,7 @@ http {
         server_name $USER_WEBSITE;
         return 301 https://$host$request_uri;
     }
-
-    server {
-        listen 80;
-        server_name static.$USER_WEBSITE;
-        return 301 https://$host$request_uri;
-    }
-
+        
     # Default server block to catch undefined subdomains
     server {
         listen 80 default_server;
@@ -92,11 +86,6 @@ http {
         ssl_certificate /keys/fullchain.pem;
         ssl_certificate_key /keys/privkey.pem;
 
-        location /static/ {
-            root /app;
-            autoindex on;
-        }
-
         location / {
             root /app;
             try_files $uri $uri/ /index.html;
@@ -109,11 +98,11 @@ http {
             }
         }
     }
-
+    
     server {
         listen 443 ssl;
         http2 on;
-        server_name static.$USER_WEBSITE;
+        server_name static.arkavo.org;
 
         include /etc/nginx/mime.types;
         default_type application/octet-stream;
@@ -124,8 +113,19 @@ http {
         location / {
             root /static;
             autoindex on;
+
+            # CORS (simple + safe for static files)
+            add_header Access-Control-Allow-Origin "https://jsynth.us" always;
+            add_header Access-Control-Allow-Methods "GET, OPTIONS" always;
+            add_header Access-Control-Allow-Headers "Content-Type" always;
+
+            # Preflight (usually not needed for a plain GET, but harmless)
+            if ($request_method = OPTIONS) {
+                return 204;
+            }
         }
     }
+
 
     server {
         listen 443 ssl;

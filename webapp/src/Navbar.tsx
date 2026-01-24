@@ -250,7 +250,7 @@ const Navbar: React.FC<NavbarProps> = ({ onProfileClick }) => {
             .map((p: any) => ({
               id: p.uuid || p.id || p.userId || "",
               name: p.name || p.display_name || p.displayName || "",
-              display: p.display_name || p.displayName || p.name || p.uuid || "",
+              display: p.display_name || p.displayName || p.name || "Unknown user",
               picture: p.picture,
             }))
             .filter((p: any) =>
@@ -423,7 +423,6 @@ const Navbar: React.FC<NavbarProps> = ({ onProfileClick }) => {
                         </div>
                         <div className="search-meta">
                           <div className="search-name">{p.display || p.name}</div>
-                          <div className="search-sub">{p.id}</div>
                         </div>
                       </button>
                     ))

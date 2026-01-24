@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import ImageEditorModal from '../components/ImageEditorModal';
 
@@ -38,6 +39,7 @@ const RoomModal: React.FC<RoomModalProps> = ({
   onRoomUpdated
 }) => {
   const { keycloak } = useAuth();
+  const navigate = useNavigate();
   const currentUserId = keycloak?.tokenParsed?.sub;
   const isDmRoom = useMemo(() => roomId.includes("_"), [roomId]);
   const [editedRoomInfo, setEditedRoomInfo] = useState({
@@ -62,6 +64,9 @@ const RoomModal: React.FC<RoomModalProps> = ({
   const isAdmin = Boolean(
     !isDmRoom && roomInfo?.admins?.includes(currentUserId || '')
   );
+  const resolveDisplayName = (name?: string) =>
+    name && name.trim().length ? name : "Unknown user";
+  const [dmActionStatus, setDmActionStatus] = useState<string | null>(null);
 
   const handleEditChange = (field: string, value: string | number | boolean) => {
     const newValue = field === 'is_public' ? (value ? 1 : 0) : value;
@@ -385,7 +390,7 @@ const RoomModal: React.FC<RoomModalProps> = ({
     }
     return (
       <div className="member-avatar-fallback">
-        {member.display_name.charAt(0).toUpperCase()}
+        {resolveDisplayName(member.display_name).charAt(0).toUpperCase()}
       </div>
     );
   };
@@ -413,10 +418,45 @@ const RoomModal: React.FC<RoomModalProps> = ({
           )}
         </div>
         <div className="dm-details">
-          <h3>{otherMember.display_name}</h3>
-          <p>{otherMember.uuid}</p>
+          <h3>{resolveDisplayName(otherMember.display_name)}</h3>
           {otherMember.name && otherMember.name !== otherMember.display_name && (
             <p className="dm-secondary">{otherMember.name}</p>
+          )}
+        </div>
+        <div className="dm-actions">
+          <button
+            type="button"
+            className="dm-action danger"
+            onClick={handleDeleteDmRoom}
+          >
+            Leave chat
+          </button>
+          <button
+            type="button"
+            className="dm-action"
+            onClick={() => handleReportUser(false)}
+            disabled={!otherMember?.uuid}
+          >
+            Report user
+          </button>
+          <button
+            type="button"
+            className="dm-action"
+            onClick={() => handleBlockUser()}
+            disabled={!otherMember?.uuid}
+          >
+            Block user
+          </button>
+          <button
+            type="button"
+            className="dm-action danger"
+            onClick={() => handleReportUser(true)}
+            disabled={!otherMember?.uuid}
+          >
+            Report + block
+          </button>
+          {dmActionStatus && (
+            <div className="dm-action-status">{dmActionStatus}</div>
           )}
         </div>
       </div>
@@ -472,6 +512,106 @@ const RoomModal: React.FC<RoomModalProps> = ({
     } finally {
       setSavingImage(false);
       setShowImageEditor(false);
+    }
+  };
+
+  const handleDeleteDmRoom = async () => {
+    if (!keycloak?.token || !isDmRoom) return;
+    const confirmed = window.confirm("Delete this direct message? This cannot be undone.");
+    if (!confirmed) return;
+    setDmActionStatus(null);
+    try {
+      if (keycloak.isTokenExpired()) {
+        await keycloak.updateToken(30);
+      }
+      const response = await fetch(
+        `${import.meta.env.VITE_USERS_API_URL}/rooms/${roomId}`,
+        {
+          method: "DELETE",
+          headers: {
+            Authorization: `Bearer ${keycloak.token}`,
+          },
+        }
+      );
+      if (!response.ok) {
+        throw new Error("Failed to delete direct message");
+      }
+      onClose();
+      navigate("/chat");
+    } catch (error) {
+      console.error("Failed to delete direct message:", error);
+      setDmActionStatus("Could not delete this conversation.");
+    }
+  };
+
+  const handleBlockUser = async (silent = false): Promise<boolean> => {
+    if (!keycloak?.token || !otherMember?.uuid) return;
+    setDmActionStatus(null);
+    try {
+      if (keycloak.isTokenExpired()) {
+        await keycloak.updateToken(30);
+      }
+      const response = await fetch(
+        `${import.meta.env.VITE_USERS_API_URL}/users/${otherMember.uuid}/block`,
+        {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${keycloak.token}`,
+          },
+        }
+      );
+      if (!response.ok) {
+        throw new Error("Failed to block user");
+      }
+      if (!silent) {
+        setDmActionStatus("User blocked.");
+      }
+      return true;
+    } catch (error) {
+      console.error("Failed to block user:", error);
+      if (!silent) {
+        setDmActionStatus("Could not block this user.");
+      }
+      return false;
+    }
+  };
+
+  const handleReportUser = async (alsoBlock: boolean) => {
+    if (!keycloak?.token || !otherMember?.uuid) return;
+    const reason = window.prompt("Report reason (optional):");
+    if (reason === null) return;
+    setDmActionStatus(null);
+    try {
+      if (keycloak.isTokenExpired()) {
+        await keycloak.updateToken(30);
+      }
+      const response = await fetch(
+        `${import.meta.env.VITE_USERS_API_URL}/users/${otherMember.uuid}/report`,
+        {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${keycloak.token}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({ room_id: roomId, reason: reason || "" }),
+        }
+      );
+      if (!response.ok) {
+        throw new Error("Failed to report user");
+      }
+      if (alsoBlock) {
+        const blocked = await handleBlockUser(true);
+        setDmActionStatus(
+          blocked
+            ? "Report submitted and user blocked."
+            : "Report submitted, but blocking failed."
+        );
+      } else {
+        setDmActionStatus("Report submitted.");
+      }
+    } catch (error) {
+      console.error("Failed to report user:", error);
+      setDmActionStatus("Could not submit report.");
     }
   };
 
@@ -558,7 +698,7 @@ const RoomModal: React.FC<RoomModalProps> = ({
             <p><strong>Name:</strong> {roomInfo?.name}</p>
             <p><strong>Type:</strong> {roomInfo?.is_public ? 'Public' : 'Private'}</p>
             {roomInfo?.creator && (
-              <p><strong>Created by:</strong> {roomInfo.creator}</p>
+              <p><strong>Created by:</strong> {resolveDisplayName(profiles[roomInfo.creator]?.display_name)}</p>
             )}
           </>
         )}
@@ -568,7 +708,7 @@ const RoomModal: React.FC<RoomModalProps> = ({
             <ul>
               {roomInfo?.admins?.map(adminId => (
                 <li key={adminId}>
-                  {profiles[adminId]?.display_name || adminId}
+                  {resolveDisplayName(profiles[adminId]?.display_name)}
                 </li>
               ))}
             </ul>
@@ -598,8 +738,7 @@ const RoomModal: React.FC<RoomModalProps> = ({
                           {renderMemberAvatar(member)}
                         </div>
                         <div className="room-member-details">
-                          <span className="member-name">{member.display_name}</span>
-                          <span className="member-uuid">{member.uuid}</span>
+                          <span className="member-name">{resolveDisplayName(member.display_name)}</span>
                         </div>
                         <div className="room-member-actions">
                       {roomInfo?.admins?.includes(member.uuid) && (
@@ -675,9 +814,8 @@ const RoomModal: React.FC<RoomModalProps> = ({
                       <div key={person.uuid} className="invite-option">
                         <div className="invite-details">
                           <span className="member-name">
-                            {person.display_name || person.name || person.uuid}
+                            {resolveDisplayName(person.display_name || person.name)}
                           </span>
-                          <span className="member-uuid">{person.uuid}</span>
                         </div>
                         <button
                           type="button"

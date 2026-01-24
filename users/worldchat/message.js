@@ -28,12 +28,10 @@ function initMessageApp() {
     } catch (err) {
       console.error('Error fetching user profile:', err);
     }
-    // First try Keycloak's avatar, then default
+    // Fall back to a deleted placeholder when profile is missing.
     return {
-      display_name: username,
-      picture: keycloak.tokenParsed?.avatar ||
-        keycloak.tokenParsed?.picture ||
-        'https://codecollective.us/images/default-profile.png'
+      display_name: '[deleted]',
+      picture: 'https://codecollective.us/images/default-profile.png'
     };
   }
 

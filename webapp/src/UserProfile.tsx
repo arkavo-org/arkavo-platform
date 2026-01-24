@@ -35,7 +35,7 @@ const UserProfile: React.FC<UserProfileProps> = ({ userId, onClose, onMessage })
         if (response.ok) {
           const data = await response.json();
           setProfileData({
-            display_name: data.display_name || userId,
+            display_name: data.display_name || "Unknown user",
             picture: data.picture || '',
             bio: data.bio || ''
           });

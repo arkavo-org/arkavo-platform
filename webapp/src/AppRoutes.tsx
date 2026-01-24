@@ -14,12 +14,34 @@ import Events from './Events';
 import TDF from './TDF';
 import Ballot from './Ballot';
 import './css/App.css';
+import './css/Promo.css';
 import Bluesky from './Bluesky';
+import Promo from './Promo';
+import { useAuth } from './context/AuthContext';
 
 interface AppRoutesProps {}
 
 const AppRoutes: React.FC<AppRoutesProps> = () => {
     const [showProfileModal, setShowProfileModal] = useState(false);
+    const { isAuthenticated, isLoading } = useAuth();
+
+    if (isLoading) {
+        return (
+            <div className="promo-shell">
+                <div className="promo-hero">
+                    <div className="promo-hero-text">
+                        <span className="promo-kicker">Arkavo Secure Messaging</span>
+                        <h1>Establishing secure session</h1>
+                        <p>Validating credentials and policy for mission access.</p>
+                    </div>
+                </div>
+            </div>
+        );
+    }
+
+    if (!isAuthenticated) {
+        return <Promo />;
+    }
 
     return (
         <div id="fullpage">

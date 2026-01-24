@@ -70,6 +70,7 @@ html, body {
     border: 2px solid rgba(255, 255, 255, 0.2);
     transition: border-color 0.2s ease, box-shadow 0.2s ease;
     transition: all 0.2s ease;
+    position: relative;
 }
 
 .message-item:hover {
@@ -84,6 +85,108 @@ html, body {
 
 .message-item:not(.decrypted) {
     border-color: rgba(255, 255, 255, 0.35);
+}
+
+.message-menu-wrapper {
+    position: absolute;
+    top: 6px;
+    right: 6px;
+    display: flex;
+    align-items: flex-start;
+}
+
+.message-menu-button {
+    background: rgba(0, 0, 0, 0.35);
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    color: #f5f5f5;
+    border-radius: 8px;
+    width: 28px;
+    height: 28px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    font-size: 18px;
+}
+
+.message-menu {
+    position: absolute;
+    top: 34px;
+    right: 0;
+    background: #1a1a1a;
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    border-radius: 10px;
+    box-shadow: 0 10px 24px rgba(0, 0, 0, 0.45);
+    padding: 6px;
+    min-width: 160px;
+    z-index: 5;
+}
+
+.message-menu-item {
+    display: block;
+    width: 100%;
+    padding: 8px 10px;
+    text-align: left;
+    background: transparent;
+    border: none;
+    color: #f5f5f5;
+    font-size: 0.9rem;
+    border-radius: 8px;
+}
+
+.message-menu-item:hover {
+    background: rgba(255, 255, 255, 0.08);
+}
+
+.message-menu-item.danger {
+    color: #f6b37a;
+}
+
+.message-menu-status {
+    margin-top: 6px;
+    font-size: 0.8rem;
+    color: rgba(255, 255, 255, 0.65);
+}
+
+.message-edit {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.message-edit textarea {
+    width: 100%;
+    min-height: 80px;
+    background: rgba(0, 0, 0, 0.2);
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    color: #f5f5f5;
+    border-radius: 8px;
+    padding: 8px;
+    resize: vertical;
+}
+
+.message-edit-actions {
+    display: flex;
+    gap: 8px;
+}
+
+.message-edit-save,
+.message-edit-cancel {
+    border-radius: 8px;
+    border: none;
+    padding: 6px 12px;
+    cursor: pointer;
+}
+
+.message-edit-save {
+    background: var(--arkavo-dark-orange, #f99742);
+    color: #1a1a1a;
+    font-weight: 600;
+}
+
+.message-edit-cancel {
+    background: rgba(255, 255, 255, 0.08);
+    color: #f5f5f5;
 }
 
 .room-item.selected {
@@ -199,11 +302,6 @@ html, body {
     font-weight: 500;
 }
 
-.person-id {
-    color: #777;
-    font-size: 0.8rem;
-}
-
 .people-empty {
     color: #777;
     font-size: 0.9rem;
@@ -215,8 +313,9 @@ html, body {
     display: flex;
     flex-direction: column;
     min-height: 0;
+    height: 100%;
     background-color: #1a1a1a;
-    overflow: auto;
+    overflow: hidden;
     position: relative;
 }
 
@@ -382,7 +481,7 @@ html, body {
   flex-direction: column;
   min-height: 0;
   height: 100%;
-  overflow: visible;
+  overflow: hidden;
 }
 
 .room-mobile-header {
@@ -719,7 +818,7 @@ html, body {
 
     .chat-area {
         width: 100%;
-        overflow: visible;
+        overflow: hidden;
     }
 
     .mobile-sidebar-toggle {
@@ -886,6 +985,7 @@ html, body {
     padding: 16px;
     border-radius: 16px;
     background: rgba(255,255,255,0.03);
+    flex-wrap: wrap;
 }
 
 .dm-avatar {
@@ -919,6 +1019,35 @@ html, body {
 
 .dm-details .dm-secondary {
     font-style: italic;
+}
+
+.dm-actions {
+    margin-left: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    min-width: 160px;
+}
+
+.dm-action {
+    border-radius: 10px;
+    border: 1px solid rgba(255,255,255,0.12);
+    background: rgba(255,255,255,0.06);
+    color: #f5f5f5;
+    padding: 8px 12px;
+    font-size: 0.9rem;
+    text-align: left;
+}
+
+.dm-action.danger {
+    background: rgba(249,151,66,0.2);
+    border-color: rgba(249,151,66,0.5);
+    color: #f6b37a;
+}
+
+.dm-action-status {
+    font-size: 0.85rem;
+    color: rgba(255,255,255,0.7);
 }
 
 .admins-section h3 {
@@ -1028,11 +1157,6 @@ html, body {
 .member-name {
     font-weight: 600;
     color: white;
-}
-
-.member-uuid {
-    font-size: 0.8rem;
-    color: rgba(255,255,255,0.5);
 }
 
 .member-role-badge {
@@ -1198,6 +1322,11 @@ html, body {
     .dm-avatar {
         width: 56px;
         height: 56px;
+    }
+
+    .dm-actions {
+        margin-left: 0;
+        width: 100%;
     }
 
     .subsection-header {

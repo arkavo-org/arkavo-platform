@@ -48,6 +48,11 @@ body.chat-page-locked {
   overflow: hidden;
 }
 
+body.chat-page-locked #fullpage {
+  height: 100vh;
+  overflow: hidden;
+}
+
 /* Allow scrolling on small devices even when chat-page-locked is applied */
 @media (max-width: 900px) {
   body.chat-page-locked {

@@ -14,12 +14,20 @@ import requests
 import json
 import base64
 import redis
-import keycloak
+import keycloak 
 
 # Add parent directory to sys.path 
 import sys
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
-from env import REDIS_PASSWORD
+from env import (
+    REDIS_PASSWORD,
+    KEYCLOAK_AUTH_URL,
+    KEYCLOAK_INTERNAL_AUTH_URL,
+    KEYCLOAK_REALM,
+    KEYCLOAK_ADMIN,
+    KEYCLOAK_ADMIN_PASSWORD,
+    ADMIN_CLIENT,
+)
 
 current_dir = os.path.dirname(os.path.abspath(__file__))
 
@@ -132,11 +140,46 @@ def add_notification(user_id: str, payload: Dict[str, Any]) -> Dict[str, Any]:
     )
     return notification
 
+def get_keycloak_admin_token() -> str:
+    auth_base = KEYCLOAK_INTERNAL_AUTH_URL or KEYCLOAK_AUTH_URL
+    token_url = f"{auth_base}/realms/master/protocol/openid-connect/token"
+    data = {
+        "client_id": ADMIN_CLIENT,
+        "username": KEYCLOAK_ADMIN,
+        "password": KEYCLOAK_ADMIN_PASSWORD,
+        "grant_type": "password",
+    }
+    response = requests.post(token_url, data=data)
+    if not response.ok:
+        raise HTTPException(
+            status_code=502,
+            detail="Failed to authenticate with Keycloak admin",
+        )
+    token = response.json().get("access_token")
+    if not token:
+        raise HTTPException(
+            status_code=502,
+            detail="Missing Keycloak admin access token",
+        )
+    return token
+
 def get_profile_summary(user_uuid: str) -> Dict[str, Optional[str]]:
     user_key = get_user_key(user_uuid)
     user_data = redis_client.hgetall(user_key)
-    profile_data = {k.decode(): v.decode() for k, v in user_data.items()} if user_data else {}
-    display_name = profile_data.get("display_name") or profile_data.get("name") or user_uuid
+    if not user_data:
+        return {
+            "uuid": user_uuid,
+            "name": "[deleted]",
+            "display_name": "[deleted]",
+            "picture": None
+        }
+
+    profile_data = {k.decode(): v.decode() for k, v in user_data.items()}
+    display_name = (
+        profile_data.get("display_name")
+        or profile_data.get("name")
+        or "Unknown user"
+    )
 
     return {
         "uuid": user_uuid,
@@ -223,14 +266,16 @@ async def get_profile_by_uuid(
 
     user_key = get_user_key(user_uuid)
     user_data = redis_client.hgetall(user_key)
-    if user_data:
-        profile_data = {k.decode(): v.decode() for k, v in user_data.items()}
-    else:
-        profile_data = {
+    if not user_data:
+        return {
             "uuid": user_uuid,
-            "display_name": user_uuid,
-            "name": user_uuid
+            "name": "[deleted]",
+            "display_name": "[deleted]",
+            "bio": None,
+            "picture": None
         }
+
+    profile_data = {k.decode(): v.decode() for k, v in user_data.items()}
 
     # Get default image if no picture set
     default_image_path = os.path.join(current_dir, "..", "webapp", "public", "assets", "dummy-image.jpg")
@@ -244,7 +289,7 @@ async def get_profile_by_uuid(
     display_name = (
         profile_data.get("display_name")
         or profile_data.get("name")
-        or user_uuid
+        or "Unknown user"
     )
 
     return {
@@ -267,13 +312,127 @@ async def delete_user(
     if requester_id != uuid:
         raise HTTPException(status_code=403, detail="Cannot delete another user")
 
+    admin_token = get_keycloak_admin_token()
+    auth_base = KEYCLOAK_INTERNAL_AUTH_URL or KEYCLOAK_AUTH_URL
+    keycloak_user_url = f"{auth_base}/admin/realms/{KEYCLOAK_REALM}/users/{uuid}"
+    kc_response = requests.delete(
+        keycloak_user_url,
+        headers={"Authorization": f"Bearer {admin_token}"},
+    )
+    if kc_response.status_code not in (204, 404):
+        raise HTTPException(
+            status_code=502,
+            detail="Failed to delete Keycloak account",
+        )
+
     user_key = get_user_key(uuid)
     notifications_key = get_notifications_key(uuid)
+    user_rooms_key = get_user_rooms_key(uuid)
+    user_blocks_key = get_user_blocks_key(uuid)
+    room_ids = [room_id.decode() for room_id in redis_client.smembers(user_rooms_key)]
 
+    for room_id in room_ids:
+        room_key = get_room_key(room_id)
+        room_data = redis_client.hgetall(room_key)
+        is_public = room_data.get(b"is_public", b"0") == b"1" if room_data else False
+        is_dm = "_" in room_id
+
+        if is_dm or not is_public:
+            member_ids = redis_client.smembers(get_users_key(room_id))
+            for member in member_ids:
+                member_id = member.decode()
+                redis_client.srem(get_user_rooms_key(member_id), room_id)
+
+            redis_client.delete(
+                room_key,
+                get_users_key(room_id),
+                get_admins_key(room_id),
+                f"room:{room_id}:messages",
+                get_pubsub_key(room_id),
+            )
+        else:
+            redis_client.srem(get_users_key(room_id), uuid)
+            redis_client.srem(get_admins_key(room_id), uuid)
+            redis_client.srem(user_rooms_key, room_id)
+
+    redis_client.delete(user_rooms_key)
     redis_client.delete(user_key)
     redis_client.delete(notifications_key)
+    redis_client.delete(user_blocks_key)
+
+    for key in redis_client.scan_iter("user:*:blocked"):
+        redis_client.srem(key, uuid)
+
+    reports_key = get_reports_key()
+    if redis_client.exists(reports_key):
+        reports = redis_client.lrange(reports_key, 0, -1)
+        retained = []
+        for report in reports:
+            try:
+                report_data = json.loads(report.decode("utf-8"))
+            except Exception:
+                continue
+            if report_data.get("reporter_id") == uuid:
+                continue
+            if report_data.get("target_id") == uuid:
+                continue
+            retained.append(json.dumps(report_data))
+        redis_client.delete(reports_key)
+        if retained:
+            redis_client.rpush(reports_key, *retained)
 
     return {"message": "User deleted"}
+
+@app.post("/users/{target_id}/block")
+async def block_user(
+    target_id: str,
+    current_user: dict = Depends(get_current_user)
+):
+    requester_id = current_user.get("sub")
+    if not requester_id:
+        raise HTTPException(status_code=403, detail="Not authenticated")
+    if requester_id == target_id:
+        raise HTTPException(status_code=400, detail="Cannot block yourself")
+
+    redis_client.sadd(get_user_blocks_key(requester_id), target_id)
+    return {"status": "blocked"}
+
+@app.delete("/users/{target_id}/block")
+async def unblock_user(
+    target_id: str,
+    current_user: dict = Depends(get_current_user)
+):
+    requester_id = current_user.get("sub")
+    if not requester_id:
+        raise HTTPException(status_code=403, detail="Not authenticated")
+    if requester_id == target_id:
+        raise HTTPException(status_code=400, detail="Cannot unblock yourself")
+
+    redis_client.srem(get_user_blocks_key(requester_id), target_id)
+    return {"status": "unblocked"}
+
+@app.post("/users/{target_id}/report")
+async def report_user(
+    target_id: str,
+    payload: dict,
+    current_user: dict = Depends(get_current_user)
+):
+    requester_id = current_user.get("sub")
+    if not requester_id:
+        raise HTTPException(status_code=403, detail="Not authenticated")
+    if requester_id == target_id:
+        raise HTTPException(status_code=400, detail="Cannot report yourself")
+
+    report = {
+        "id": str(uuid.uuid4()),
+        "reporter_id": requester_id,
+        "target_id": target_id,
+        "room_id": payload.get("room_id"),
+        "reason": payload.get("reason"),
+        "timestamp": datetime.now(timezone.utc).isoformat()
+    }
+    redis_client.rpush(get_reports_key(), json.dumps(report))
+    return {"status": "reported"}
 
 @app.get("/people")
 async def list_people(current_user: dict = Depends(get_current_user)):
@@ -330,6 +489,12 @@ def get_user_rooms_key(user_id: str) -> str:
 
 def get_pubsub_key(room_id: str) -> str:
     return f"room:{room_id}:pubsub"
+
+def get_user_blocks_key(user_id: str) -> str:
+    return f"user:{user_id}:blocked"
+
+def get_reports_key() -> str:
+    return "reports"
 
 def check_room_access(room_id: str, user_id: str) -> bool:
     """Check if user has access to room (public or invited)"""
@@ -412,11 +577,22 @@ async def post_message(room_id: str, message: dict, current_user: dict = Depends
         except json.JSONDecodeError:
             pass  # Keep as string if not valid JSON
 
+    content_uuid = message.get("content_uuid")
+    if not content_uuid and isinstance(message.get("content"), str):
+        trimmed = message["content"].strip()
+        if not trimmed.startswith("TDF"):
+            try:
+                parsed = json.loads(trimmed)
+                content_uuid = parsed.get("uuid")
+            except json.JSONDecodeError:
+                content_uuid = None
+
     # Enforce server-controlled fields
     message.update({
         "sender": user_id,
         "timestamp": datetime.now(timezone.utc).isoformat(),
-        "roomId": room_id  # Ensure roomId is included for WebSocket routing
+        "roomId": room_id,  # Ensure roomId is included for WebSocket routing
+        "content_uuid": content_uuid
     })
     
     # Store message in Redis list (persistent storage)
@@ -463,6 +639,35 @@ async def update_room(
     print(f"Room data after update: {updated_data}")  # Debug log
     
     return {"status": "room updated"}
+
+@app.delete("/rooms/{room_id}")
+async def delete_dm_room(
+    room_id: str,
+    current_user: dict = Depends(get_current_user)
+):
+    """Delete a direct message room for all participants."""
+    user_id = current_user.get("sub")
+    if not user_id:
+        raise HTTPException(status_code=403, detail="Not authenticated")
+    if "_" not in room_id:
+        raise HTTPException(status_code=400, detail="Only direct message rooms can be deleted")
+
+    if not redis_client.sismember(get_users_key(room_id), user_id):
+        raise HTTPException(status_code=403, detail="Access denied")
+
+    member_ids = redis_client.smembers(get_users_key(room_id))
+    for member in member_ids:
+        member_id = member.decode()
+        redis_client.srem(get_user_rooms_key(member_id), room_id)
+
+    redis_client.delete(
+        get_room_key(room_id),
+        get_users_key(room_id),
+        get_admins_key(room_id),
+        f"room:{room_id}:messages",
+        get_pubsub_key(room_id),
+    )
+    return {"status": "room deleted"}
 
 @app.get("/rooms/{room_id}")
 async def get_room(
@@ -542,6 +747,105 @@ async def get_room_messages(
             continue
             
     return {"messages": parsed_messages}
+
+def find_message_index(room_id: str, message_id: str) -> Optional[Dict[str, Any]]:
+    message_key = f"room:{room_id}:messages"
+    messages = redis_client.lrange(message_key, 0, -1)
+    for index, msg in enumerate(messages):
+        try:
+            msg_data = json.loads(msg.decode("utf-8"))
+        except Exception:
+            continue
+        if msg_data.get("content_uuid") == message_id:
+            return {"index": index, "message": msg_data}
+        content = msg_data.get("content")
+        if isinstance(content, str):
+            trimmed = content.strip()
+            if not trimmed.startswith("TDF"):
+                try:
+                    parsed = json.loads(trimmed)
+                except json.JSONDecodeError:
+                    parsed = None
+                if parsed and parsed.get("uuid") == message_id:
+                    return {"index": index, "message": msg_data}
+    return None
+
+@app.patch("/rooms/{room_id}/messages/{message_id}")
+async def edit_room_message(
+    room_id: str,
+    message_id: str,
+    payload: dict,
+    current_user: dict = Depends(get_current_user)
+):
+    user_id = current_user.get("sub")
+    if not check_room_access(room_id, user_id):
+        raise HTTPException(status_code=403, detail="Access denied")
+
+    result = find_message_index(room_id, message_id)
+    if not result:
+        raise HTTPException(status_code=404, detail="Message not found")
+
+    msg_data = result["message"]
+    if msg_data.get("sender") != user_id:
+        raise HTTPException(status_code=403, detail="Cannot edit another user's message")
+
+    new_content = payload.get("content")
+    if new_content is None:
+        raise HTTPException(status_code=400, detail="Missing content")
+
+    msg_data["content"] = new_content
+    msg_data["content_uuid"] = message_id
+    msg_data["edited_at"] = datetime.now(timezone.utc).isoformat()
+
+    message_key = f"room:{room_id}:messages"
+    redis_client.lset(message_key, result["index"], json.dumps(msg_data))
+
+    await manager.broadcast(
+        room_id,
+        {
+            "type": "message_edit",
+            "roomId": room_id,
+            "message_id": message_id,
+            "content": new_content,
+            "sender": user_id,
+            "edited_at": msg_data["edited_at"],
+        },
+    )
+    return {"status": "message updated"}
+
+@app.delete("/rooms/{room_id}/messages/{message_id}")
+async def delete_room_message(
+    room_id: str,
+    message_id: str,
+    current_user: dict = Depends(get_current_user)
+):
+    user_id = current_user.get("sub")
+    if not check_room_access(room_id, user_id):
+        raise HTTPException(status_code=403, detail="Access denied")
+
+    result = find_message_index(room_id, message_id)
+    if not result:
+        raise HTTPException(status_code=404, detail="Message not found")
+
+    msg_data = result["message"]
+    if msg_data.get("sender") != user_id:
+        raise HTTPException(status_code=403, detail="Cannot delete another user's message")
+
+    message_key = f"room:{room_id}:messages"
+    tombstone = json.dumps({"_deleted": True, "content_uuid": message_id})
+    redis_client.lset(message_key, result["index"], tombstone)
+    redis_client.lrem(message_key, 1, tombstone)
+
+    await manager.broadcast(
+        room_id,
+        {
+            "type": "message_delete",
+            "roomId": room_id,
+            "message_id": message_id,
+            "sender": user_id,
+        },
+    )
+    return {"status": "message deleted"}
 
 @app.get("/rooms/{room_id}/members")
 async def get_room_members(
@@ -709,11 +1013,11 @@ async def websocket_endpoint(websocket: WebSocket):
         try:
             data = await websocket.receive_json()
             if data.get("type") == "disconnect":
-                await manager.disconnect(client_id)
+                manager.disconnect(client_id)
                 await websocket.close()
                 return
         except WebSocketDisconnect:
-            await manager.disconnect(client_id)
+            manager.disconnect(client_id)
             return
 
 if __name__ == "__main__": 

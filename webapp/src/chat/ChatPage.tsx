@@ -131,34 +131,33 @@ const ChatPage: React.FC = () => {
     markRoomAsRead(activeRoom);
   }, [activeRoom, markRoomAsRead]);
 
-  useEffect(() => {
-    const fetchUserRooms = async () => {
-      try {
-        if (keycloak?.isTokenExpired()) {
-          await keycloak.updateToken(30);
-        }
-
-        const response = await fetch(
-          `${import.meta.env.VITE_USERS_API_URL}/user/rooms`,
-          {
-            headers: {
-              Authorization: `Bearer ${keycloak?.token}`,
-            },
-          }
-        );
-        if (response.ok) {
-          const data = await response.json();
-          setUserRooms(data.rooms);
-        }
-      } catch (error) {
-        console.error("Failed to fetch user rooms:", error);
+  const fetchUserRooms = useCallback(async () => {
+    if (!isAuthenticated || !keycloak?.token) return;
+    try {
+      if (keycloak?.isTokenExpired()) {
+        await keycloak.updateToken(30);
       }
-    };
 
-    if (isAuthenticated && keycloak?.token) {
-      fetchUserRooms();
+      const response = await fetch(
+        `${import.meta.env.VITE_USERS_API_URL}/user/rooms`,
+        {
+          headers: {
+            Authorization: `Bearer ${keycloak?.token}`,
+          },
+        }
+      );
+      if (response.ok) {
+        const data = await response.json();
+        setUserRooms(data.rooms);
+      }
+    } catch (error) {
+      console.error("Failed to fetch user rooms:", error);
     }
-  }, [isAuthenticated, keycloak?.token]);
+  }, [isAuthenticated, keycloak]);
+
+  useEffect(() => {
+    fetchUserRooms();
+  }, [fetchUserRooms, urlRoomId]);
 
   useEffect(() => {
     const fetchPeople = async () => {
@@ -192,7 +191,7 @@ const ChatPage: React.FC = () => {
             .map((person) => {
               const userId = person.uuid;
               const displayName =
-                person.display_name || person.name || userId;
+                person.display_name || person.name || "Unknown user";
               return {
                 userId,
                 roomId:
@@ -261,7 +260,7 @@ const ChatPage: React.FC = () => {
         return {
           roomId: room.id,
           otherUserId,
-          displayName: profile?.displayName || otherUserId,
+          displayName: profile?.displayName || "Unknown user",
           picture: profile?.picture,
         };
       })
@@ -299,7 +298,7 @@ const ChatPage: React.FC = () => {
     userId: string
   ): Promise<UserProfileSummary> => {
     if (!keycloak?.token) {
-      return { displayName: userId };
+      return { displayName: "Unknown user" };
     }
 
     try {
@@ -319,7 +318,7 @@ const ChatPage: React.FC = () => {
       if (response.ok) {
         const data = await response.json();
         return {
-          displayName: data.display_name || userId,
+          displayName: data.display_name || "Unknown user",
           picture: data.picture,
         };
       }
@@ -327,7 +326,7 @@ const ChatPage: React.FC = () => {
       console.error("Failed to fetch user profile:", error);
     }
 
-    return { displayName: userId };
+    return { displayName: "Unknown user" };
   };
 
   useEffect(() => {
@@ -454,7 +453,6 @@ const ChatPage: React.FC = () => {
                 )}
                 <div className="person-meta">
                   <div className="person-name">{dm.displayName}</div>
-                  <div className="person-id">{dm.otherUserId}</div>
                 </div>
                 {unreadRooms[dm.roomId] && (
                   <span className="room-alert" title="Unread messages">
@@ -546,7 +544,6 @@ const ChatPage: React.FC = () => {
                     </div>
                     <div>
                       <div className="suggestion-name">{person.displayName}</div>
-                      <div className="suggestion-meta">{person.userId}</div>
                     </div>
                   </div>
                 ))}
