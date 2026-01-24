@@ -25,7 +25,10 @@
     "react-router-dom": "^6.28.0",
     "@remix-run/router": "^1.23.0",
     "toastr": "^2.1.4",
-    "webrtc-adapter": "^9.0.1"
+    "webrtc-adapter": "^9.0.1",
+    "@capacitor/android": "^6.1.0",
+    "@capacitor/cli": "^6.1.0",
+    "@capacitor/core": "^6.1.0"
   },
   "name": "www",
   "private": true,
@@ -35,7 +38,11 @@
     "dev": "vite",
     "build": "tsc -b && vite build",
     "lint": "eslint .",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "cap:add": "npx cap add android",
+    "cap:sync": "npx cap sync android",
+    "cap:open": "npx cap open android",
+    "cap:apk": "cd android && ./gradlew assembleDebug"
   },
   "devDependencies": {
     "@eslint/js": "^9.11.1",

@@ -545,7 +545,7 @@ const RoomModal: React.FC<RoomModalProps> = ({
   };
 
   const handleBlockUser = async (silent = false): Promise<boolean> => {
-    if (!keycloak?.token || !otherMember?.uuid) return;
+    if (!keycloak?.token || !otherMember?.uuid) return false;
     setDmActionStatus(null);
     try {
       if (keycloak.isTokenExpired()) {

@@ -367,7 +367,26 @@ webapp_build = dict(
         "VITE_ORG_BACKEND_URL": VITE_ORG_BACKEND_URL,
         "VITE_KAS_ENDPOINT": VITE_KAS_ENDPOINT,
     },
-    command="sh -c 'npm install && npm run build  --verbose'",
+    command=(
+        "sh -c '"
+        "npm install && "
+        "npm run build --verbose && "
+        "if [ ! -d android ]; then npx cap add android; fi && "
+        "npx cap sync android'"
+    ),
+)
+
+webapp_android_build = dict(
+    image="ghcr.io/cirruslabs/android-sdk:34",
+    detach=True,
+    name="webapp_android_build",
+    network=NETWORK_NAME,
+    restart_policy={"Name": "no"},
+    volumes={
+        webapp_dir: {"bind": "/usr/src/app", "mode": "rw"},
+    },
+    working_dir="/usr/src/app/android",
+    command="sh -c './gradlew assembleRelease'",
 )
 
 webapp = dict(

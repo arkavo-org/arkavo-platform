@@ -123,6 +123,8 @@ if "webapp" in env.SERVICES_TO_RUN:
     utils_docker.run_container(env.webapp)
 if "webapp_build" in env.SERVICES_TO_RUN:
     utils_docker.run_container(env.webapp_build)
+    if "webapp_android_build" in env.SERVICES_TO_RUN:
+        utils_docker.run_container(env.webapp_android_build)
 
 if "nextcloud" in env.SERVICES_TO_RUN:
     print("Running Nextcloud stack")

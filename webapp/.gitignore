@@ -144,3 +144,4 @@ package-lock.json
 *.lock
 keys
 env.py
+android
