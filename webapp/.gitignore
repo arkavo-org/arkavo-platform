@@ -91,6 +91,10 @@ out
 .nuxt
 dist
 
+# Android signing artifacts
+android/keystore/
+android/keystore.properties
+
 # Gatsby files
 .cache/
 # Comment in the public line in if your project uses Gatsby and not Next.js
@@ -145,3 +149,4 @@ package-lock.json
 keys
 env.py
 android
+.gradle

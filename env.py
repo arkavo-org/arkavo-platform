@@ -366,13 +366,16 @@ webapp_build = dict(
         "VITE_KEYCLOAK_CLIENT_ID": VITE_KEYCLOAK_CLIENT_ID,
         "VITE_ORG_BACKEND_URL": VITE_ORG_BACKEND_URL,
         "VITE_KAS_ENDPOINT": VITE_KAS_ENDPOINT,
+        "HOST_UID": str(uid),
+        "HOST_GID": str(gid),
     },
     command=(
         "sh -c '"
         "npm install && "
         "npm run build --verbose && "
         "if [ ! -d android ]; then npx cap add android; fi && "
-        "npx cap sync android'"
+        "npx cap sync android && "
+        "chown -R ${HOST_UID}:${HOST_GID} /usr/src/app/android'"
     ),
 )
 
@@ -384,9 +387,34 @@ webapp_android_build = dict(
     restart_policy={"Name": "no"},
     volumes={
         webapp_dir: {"bind": "/usr/src/app", "mode": "rw"},
+        os.path.join(webapp_dir, ".gradle"): {"bind": "/root/.gradle", "mode": "rw"},
     },
     working_dir="/usr/src/app/android",
-    command="sh -c './gradlew assembleRelease'",
+    command=(
+        "sh -c '"
+        "KEYSTORE_PROPS=/usr/src/app/android/keystore.properties && "
+        "if [ ! -f \"$KEYSTORE_PROPS\" ]; then "
+        "mkdir -p /usr/src/app/android/keystore && "
+        "STORE_PASS=$(od -An -N16 -tx1 /dev/urandom | tr -d \" \\n\") && "
+        "KEY_PASS=$STORE_PASS && "
+        "KEY_ALIAS=arkavo-release && "
+        "KEYSTORE_PATH=/usr/src/app/android/keystore/arkavo-release.jks && "
+        "keytool -genkeypair -v "
+        "-keystore \"$KEYSTORE_PATH\" "
+        "-alias \"$KEY_ALIAS\" "
+        "-keyalg RSA -keysize 2048 -validity 10000 "
+        "-storepass \"$STORE_PASS\" -keypass \"$KEY_PASS\" "
+        "-dname \"CN=Arkavo, OU=Arkavo, O=Arkavo, L=Unknown, S=Unknown, C=US\" && "
+        "printf \"storeFile=%s\\nstorePassword=%s\\nkeyAlias=%s\\nkeyPassword=%s\\n\" "
+        "\"$KEYSTORE_PATH\" \"$STORE_PASS\" \"$KEY_ALIAS\" \"$KEY_PASS\" > \"$KEYSTORE_PROPS\" && "
+        "chmod 600 \"$KEYSTORE_PROPS\"; "
+        "fi && "
+        "./gradlew assembleRelease && "
+        "APK_PATH=app/build/outputs/apk/release/app-release.apk && "
+        "if [ ! -f \"$APK_PATH\" ]; then echo \"Missing APK at $APK_PATH\"; exit 1; fi && "
+        "APKSIGNER=\"$ANDROID_SDK_ROOT/build-tools/$(ls $ANDROID_SDK_ROOT/build-tools | sort -V | tail -n1)/apksigner\" && "
+        "\"$APKSIGNER\" verify --verbose \"$APK_PATH\"'"
+    ),
 )
 
 webapp = dict(

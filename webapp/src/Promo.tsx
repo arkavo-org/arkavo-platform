@@ -4,6 +4,13 @@ import "./css/Promo.css";
 
 const Promo: React.FC = () => {
   const { login, isLoading } = useAuth();
+  const isMobile =
+    typeof navigator !== "undefined" &&
+    /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+  const isStandalone =
+    typeof window !== "undefined" &&
+    (window.matchMedia?.("(display-mode: standalone)")?.matches ||
+      (navigator as Navigator & { standalone?: boolean }).standalone);
 
   return (
     <div className="promo-shell">
@@ -24,30 +31,14 @@ const Promo: React.FC = () => {
             >
               Sign In
             </button>
-          </div>
-        </div>
-        <div className="promo-hero-card">
-          <div className="promo-card-header">
-            <div className="promo-card-tag">Operational Assurance</div>
-            <div className="promo-card-title">Secure by design</div>
-          </div>
-          <div className="promo-card-body">
-            <div className="promo-card-row">
-              <span>Trusted Data Format (TDF)</span>
-              <strong>Policy enforced</strong>
-            </div>
-            <div className="promo-card-row">
-              <span>Zero-trust message routing</span>
-              <strong>Segmentation aware</strong>
-            </div>
-            <div className="promo-card-row">
-              <span>Continuous session validation</span>
-              <strong>Adaptive assurance</strong>
-            </div>
-            <div className="promo-card-row">
-              <span>Audit-ready delivery logs</span>
-              <strong>Chain-of-custody</strong>
-            </div>
+            {isMobile && !isStandalone && (
+              <a
+                className="promo-secondary"
+                href="https://static.arkavo.org/app-release.apk"
+              >
+                Download App
+              </a>
+            )}
           </div>
         </div>
       </div>

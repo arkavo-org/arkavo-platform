@@ -136,6 +136,9 @@
   border: 1px solid rgba(11, 17, 24, 0.2);
   color: var(--promo-ink);
   background: rgba(255, 255, 255, 0.7);
+  align-self: center;
+  width: min(360px, 100%);
+  text-align: center;
 }
 
 .promo-primary:hover,
