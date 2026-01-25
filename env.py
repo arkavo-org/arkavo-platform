@@ -419,8 +419,11 @@ webapp_android_build = dict(
         "fi && "
         "./gradlew clean --no-daemon --no-parallel && "
         "./gradlew assembleRelease --no-daemon --no-parallel && "
+        "./gradlew assembleDebug --no-daemon --no-parallel && "
         "APK_PATH=app/build/outputs/apk/release/app-release.apk && "
         "if [ ! -f \"$APK_PATH\" ]; then echo \"Missing APK at $APK_PATH\"; exit 1; fi && "
+        "DEBUG_APK_PATH=app/build/outputs/apk/debug/app-debug.apk && "
+        "if [ ! -f \"$DEBUG_APK_PATH\" ]; then echo \"Missing APK at $DEBUG_APK_PATH\"; exit 1; fi && "
         "APKSIGNER=\"$ANDROID_SDK_ROOT/build-tools/$(ls $ANDROID_SDK_ROOT/build-tools | sort -V | tail -n1)/apksigner\" && "
         "\"$APKSIGNER\" verify --verbose \"$APK_PATH\"'"
     ),

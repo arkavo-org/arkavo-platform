@@ -90,8 +90,9 @@ if env.USER_WEBSITE == "localhost":
     localhost_key = os.path.join(env.keys_dir, "localhost.key")
     if not (os.path.isfile(localhost_cert) and os.path.isfile(localhost_key)):
         try:
-            subprocess.check_call(["./init-temp-keys.sh"], cwd="certs")
-            print("Ok - generated temporary keys for localhost")
+            # Use the new Python script that includes all subdomains
+            subprocess.check_call([sys.executable, "init-temp-keys.py"], cwd="certs")
+            print("Ok - generated temporary keys for localhost with all subdomains")
             sys.stdout.flush()  # Force flush in CI environments
         except subprocess.CalledProcessError as e:
             print(f"Script failed with exit code {e.returncode}")

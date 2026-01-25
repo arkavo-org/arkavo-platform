@@ -92,7 +92,7 @@ http {
     server {
         listen 443 ssl;
         http2 on;
-        server_name static.arkavo.org;
+        server_name $STATIC_BASE_URL;
 
         include /etc/nginx/mime.types;
         default_type application/octet-stream;

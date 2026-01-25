@@ -1,5 +1,5 @@
 # Most common options to change
-BACKEND_LOCATION = "arkavo.org"
+BACKEND_LOCATION = "localhost"
 GPU_BACKEND_LOCATION = "app.codecollective.us"
 BRAND_NAME = "arkavo"
 VITE_BRAND_NAME = "arkavo"
