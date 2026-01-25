@@ -85,8 +85,10 @@ def ensure_users_api_image(image_name: str) -> None:
     )
 
 # Check if the keys directory exists, if not, generate temporary keys for localhost or production keys
-if not os.path.isdir(env.keys_dir):
-    if env.USER_WEBSITE == "localhost":
+if env.USER_WEBSITE == "localhost":
+    localhost_cert = os.path.join(env.keys_dir, "localhost.crt")
+    localhost_key = os.path.join(env.keys_dir, "localhost.key")
+    if not (os.path.isfile(localhost_cert) and os.path.isfile(localhost_key)):
         try:
             subprocess.check_call(["./init-temp-keys.sh"], cwd="certs")
             print("Ok - generated temporary keys for localhost")
@@ -94,7 +96,8 @@ if not os.path.isdir(env.keys_dir):
         except subprocess.CalledProcessError as e:
             print(f"Script failed with exit code {e.returncode}")
             sys.exit(e.returncode)
-    else:
+else:
+    if not os.path.isdir(env.keys_dir):
         utils_docker.generateProdKeys(env)
 
 # Convert env.py to a dictionary

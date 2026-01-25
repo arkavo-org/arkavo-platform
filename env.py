@@ -129,6 +129,14 @@ VITE_KAS_ENDPOINT = f"https://{OPENTDF_BASE_URL}/kas"
 # More public options
 NETWORK_NAME = BRAND_NAME + distinguisher
 
+# TLS cert paths: use dev certs for localhost, certbot path otherwise.
+if USER_WEBSITE == "localhost":
+    CERT_FULLCHAIN_PATH = os.path.join(keys_dir, "localhost.crt")
+    CERT_PRIVKEY_PATH = os.path.join(keys_dir, "localhost.key")
+else:
+    CERT_FULLCHAIN_PATH = os.path.join(certbot_ssl_home, "fullchain.pem")
+    CERT_PRIVKEY_PATH = os.path.join(certbot_ssl_home, "privkey.pem")
+
 # Admin Config
 ADMIN_CLIENT = "admin-cli"
 KEYCLOAK_ADMIN = "admin"
@@ -336,8 +344,8 @@ nginx = dict(
             "bind": "/usr/share/nginx/html",
             "mode": "rw",
         },
-        f"{certbot_ssl_home}/fullchain.pem": {"bind": "/keys/fullchain.pem", "mode": "rw"},
-        f"{certbot_ssl_home}/privkey.pem": {"bind": "/keys/privkey.pem", "mode": "rw"},
+        CERT_FULLCHAIN_PATH: {"bind": "/keys/fullchain.pem", "mode": "rw"},
+        CERT_PRIVKEY_PATH: {"bind": "/keys/privkey.pem", "mode": "rw"},
     },
     ports={
         "80/tcp": 80,  # equivalent to -p 80:80
@@ -409,7 +417,8 @@ webapp_android_build = dict(
         "\"$KEYSTORE_PATH\" \"$STORE_PASS\" \"$KEY_ALIAS\" \"$KEY_PASS\" > \"$KEYSTORE_PROPS\" && "
         "chmod 600 \"$KEYSTORE_PROPS\"; "
         "fi && "
-        "./gradlew assembleRelease && "
+        "./gradlew clean --no-daemon --no-parallel && "
+        "./gradlew assembleRelease --no-daemon --no-parallel && "
         "APK_PATH=app/build/outputs/apk/release/app-release.apk && "
         "if [ ! -f \"$APK_PATH\" ]; then echo \"Missing APK at $APK_PATH\"; exit 1; fi && "
         "APKSIGNER=\"$ANDROID_SDK_ROOT/build-tools/$(ls $ANDROID_SDK_ROOT/build-tools | sort -V | tail -n1)/apksigner\" && "
@@ -608,23 +617,78 @@ elif util.check_amd_gpu():
     deepseek_janus["device_requests"] = [drequests]
 
 # BLUESKY CRYPTO SETUP
-from cryptography.hazmat.primitives.asymmetric import ec
-from cryptography.hazmat.primitives import serialization
-import secrets
+if "bluesky" in SERVICES_TO_RUN:
+    from cryptography.hazmat.primitives.asymmetric import ec
+    from cryptography.hazmat.primitives import serialization
+    import secrets
 
-# Generate a secp256k1 private key
-private_key = ec.generate_private_key(ec.SECP256K1())
-private_key_bytes = private_key.private_numbers().private_value.to_bytes(
-    32, byteorder="big"
-)
+    # Generate a secp256k1 private key
+    private_key = ec.generate_private_key(ec.SECP256K1())
+    private_key_bytes = private_key.private_numbers().private_value.to_bytes(
+        32, byteorder="big"
+    )
 
-if os.path.exists("jwt_secret.txt"):
-    with open("jwt_secret.txt", "r") as file:
-        JWT_SECRET = file.read()
-else:
-    JWT_SECRET = secrets.token_hex(16)
-    with open("jwt_secret.txt", "w+") as file:
-        file.write(JWT_SECRET)
+    if os.path.exists("jwt_secret.txt"):
+        with open("jwt_secret.txt", "r") as file:
+            JWT_SECRET = file.read()
+    else:
+        JWT_SECRET = secrets.token_hex(16)
+        with open("jwt_secret.txt", "w+") as file:
+            file.write(JWT_SECRET)
+
+    bluesky_bridge = dict(
+        image="python:3.11-slim",
+        detach=True,
+        name="bsky_bridge",
+        working_dir="/app",
+        network=NETWORK_NAME,
+        volumes={
+            bsky_bridge_dir: {"bind": "/app", "mode": "rw"},
+        },
+        environment=dict(
+            BLUESKY_HANDLE=BLUESKY_HANDLE,
+            BLUESKY_PASSWORD=BLUESKY_PASSWORD,
+        ),
+        command=["sh", "-c", "pip install atproto flask && python serve_feed.py"],
+    )
+
+    bsky_fyp = copy.copy(bluesky_bridge)
+    bsky_fyp["name"] = "bsky-fyp"
+    bsky_fyp["command"] = [
+        "sh",
+        "-c",
+        "pip install atproto flask && python serve_vertical_fyp.py",
+    ]
+
+    bluesky = dict(
+        image="ghcr.io/bluesky-social/pds:latest",
+        detach=True,
+        name="pds",
+        network=NETWORK_NAME,  # Make sure it's on the same network as nginx
+        volumes={
+            "bluesky_pds": {"bind": "/pds", "mode": "rw"},
+        },
+        environment=dict(
+            DEBUG=1,
+            PDS_HOSTNAME=USER_WEBSITE,
+            PDS_JWT_SECRET=JWT_SECRET,
+            ADMIN_HANDLE="admin",
+            ADMIN_USERNAME="admin",
+            PDS_ADMIN_PASSWORD="changeme",
+            PDS_PLC_ROTATION_KEY_K256_PRIVATE_KEY_HEX=private_key_bytes.hex(),
+            PDS_DATA_DIRECTORY="/pds",
+            PDS_BLOBSTORE_DISK_LOCATION="/pds/blocks",
+            PDS_BLOB_UPLOAD_LIMIT=52428800,
+            PDS_DID_PLC_URL="https://plc.directory",
+            PDS_BSKY_APP_VIEW_URL="https://api.bsky.app",
+            PDS_BSKY_APP_VIEW_DID="did:web:api.bsky.app",
+            PDS_REPORT_SERVICE_URL="https://mod.bsky.app",
+            PDS_REPORT_SERVICE_DID="did:plc:ar7c4by46qjdydhdevvrndac",
+            PDS_CRAWLERS="https://bsky.network",
+            LOG_ENABLED="true",
+        ),
+    )
+
 
 element = dict(
     image="vectorim/element-web:latest",
@@ -639,60 +703,6 @@ element = dict(
     },
     network=NETWORK_NAME,
 )
-
-bluesky_bridge = dict(
-    image="python:3.11-slim",
-    detach=True,
-    name="bsky_bridge",
-    working_dir="/app",
-    network=NETWORK_NAME,
-    volumes={
-        bsky_bridge_dir: {"bind": "/app", "mode": "rw"},
-    },
-    environment=dict(
-        BLUESKY_HANDLE=BLUESKY_HANDLE,
-        BLUESKY_PASSWORD=BLUESKY_PASSWORD,
-    ),
-    command=["sh", "-c", "pip install atproto flask && python serve_feed.py"],
-)
-
-bsky_fyp = copy.copy(bluesky_bridge)
-bsky_fyp["name"] = "bsky-fyp"
-bsky_fyp["command"] = [
-    "sh",
-    "-c",
-    "pip install atproto flask && python serve_vertical_fyp.py",
-]
-
-bluesky = dict(
-    image="ghcr.io/bluesky-social/pds:latest",
-    detach=True,
-    name="pds",
-    network=NETWORK_NAME,  # Make sure it's on the same network as nginx
-    volumes={
-        "bluesky_pds": {"bind": "/pds", "mode": "rw"},
-    },
-    environment=dict(
-        DEBUG=1,
-        PDS_HOSTNAME=USER_WEBSITE,
-        PDS_JWT_SECRET=JWT_SECRET,
-        ADMIN_HANDLE="admin",
-        ADMIN_USERNAME="admin",
-        PDS_ADMIN_PASSWORD="changeme",
-        PDS_PLC_ROTATION_KEY_K256_PRIVATE_KEY_HEX=private_key_bytes.hex(),
-        PDS_DATA_DIRECTORY="/pds",
-        PDS_BLOBSTORE_DISK_LOCATION="/pds/blocks",
-        PDS_BLOB_UPLOAD_LIMIT=52428800,
-        PDS_DID_PLC_URL="https://plc.directory",
-        PDS_BSKY_APP_VIEW_URL="https://api.bsky.app",
-        PDS_BSKY_APP_VIEW_DID="did:web:api.bsky.app",
-        PDS_REPORT_SERVICE_URL="https://mod.bsky.app",
-        PDS_REPORT_SERVICE_DID="did:plc:ar7c4by46qjdydhdevvrndac",
-        PDS_CRAWLERS="https://bsky.network",
-        LOG_ENABLED="true",
-    ),
-)
-
 
 gitea = dict(
     name="gitea",
