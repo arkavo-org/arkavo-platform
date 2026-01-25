@@ -1,3 +1,9 @@
 [submodule "webapp/public/ballot-sign"]
 	path = webapp/public/ballot-sign
 	url = https://github.com/juliancoy/ballot-sign
+[submodule "opentdf-platform"]
+	path = opentdf-platform
+	url = https://github.com/opentdf/platform
+[submodule "opentdf-websdk"]
+	path = opentdf-websdk
+	url = https://github.com/opentdf/web-sdk
