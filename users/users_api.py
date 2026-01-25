@@ -1,4 +1,5 @@
 from fastapi import FastAPI, Depends, HTTPException, status, Request, WebSocket, WebSocketDisconnect, UploadFile, File
+from uvicorn.middleware.proxy_headers import ProxyHeadersMiddleware
 import os
 import uuid
 import aiohttp
@@ -33,6 +34,7 @@ current_dir = os.path.dirname(os.path.abspath(__file__))
 
 # FastAPI app setup
 app = FastAPI()
+app.add_middleware(ProxyHeadersMiddleware, trusted_hosts="*")
 # Security scheme for JWT tokens
 security = HTTPBearer()
 
@@ -42,7 +44,9 @@ redis_client = redis.Redis(host='redis_messaging', port=6379, db=0, password=RED
 # JWT Authentication with python-jose
 async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(security)):
     token = credentials.credentials
-    return await keycloak.verify_token(token)
+    payload = await keycloak.verify_token(token)
+    sync_profile_from_token(payload)
+    return payload
 
 messages_all_languages: List[Dict] = []
 messages_by_language = {}
@@ -122,6 +126,35 @@ async def startup_event():
 
 def get_user_key(uuid: str) -> str:
     return f"user:{uuid}"
+
+def sync_profile_from_token(payload: Dict[str, Any]) -> None:
+    user_id = payload.get("sub")
+    if not user_id:
+        return
+    user_key = get_user_key(user_id)
+    if redis_client.exists(user_key):
+        return
+
+    given = (payload.get("given_name") or "").strip()
+    family = (payload.get("family_name") or "").strip()
+    full_name = " ".join(part for part in [given, family] if part).strip()
+    preferred_username = (payload.get("preferred_username") or "").strip()
+    name = (payload.get("name") or "").strip()
+    display_name = name or full_name or preferred_username or "Unknown user"
+
+    profile = {
+        "uuid": user_id,
+        "name": name or preferred_username or display_name,
+        "display_name": display_name,
+    }
+    email = payload.get("email")
+    if email:
+        profile["email"] = email
+    picture = payload.get("picture")
+    if picture:
+        profile["picture"] = picture
+
+    redis_client.hset(user_key, mapping=profile)
 
 def get_notifications_key(user_id: str) -> str:
     return f"user:{user_id}:notifications"
@@ -487,6 +520,18 @@ def get_admins_key(room_id: str) -> str:
 def get_user_rooms_key(user_id: str) -> str:
     return f"user:{user_id}:rooms"
 
+def get_orgs_key() -> str:
+    return "orgs"
+
+def get_org_key(org_id: str) -> str:
+    return f"org:{org_id}"
+
+def get_org_rooms_key(org_id: str) -> str:
+    return f"org:{org_id}:rooms"
+
+def get_org_events_key(org_id: str) -> str:
+    return f"org:{org_id}:events"
+
 def get_pubsub_key(room_id: str) -> str:
     return f"room:{room_id}:pubsub"
 
@@ -502,6 +547,139 @@ def check_room_access(room_id: str, user_id: str) -> bool:
     if is_public and is_public.decode() == "1":
         return True
     return redis_client.sismember(get_users_key(room_id), user_id)
+
+@app.post("/orgs")
+async def create_org(payload: dict, current_user: dict = Depends(get_current_user)):
+    """Create an organization with optional rooms and events."""
+    name = (payload.get("name") or "").strip()
+    if not name:
+        raise HTTPException(status_code=400, detail="Organization name is required")
+
+    org_id = str(uuid.uuid4())
+    slug = (payload.get("slug") or name).strip().lower().replace(" ", "-")
+    url = (payload.get("url") or "").strip()
+    owner = current_user.get("sub")
+    created_at = datetime.now(timezone.utc).isoformat()
+
+    redis_client.hset(
+        get_org_key(org_id),
+        mapping={
+            "name": name,
+            "slug": slug,
+            "url": url,
+            "owner": owner,
+            "created_at": created_at,
+        },
+    )
+    redis_client.sadd(get_orgs_key(), org_id)
+
+    rooms = payload.get("rooms") or []
+    if isinstance(rooms, list):
+        for room_id in rooms:
+            if isinstance(room_id, str) and room_id.strip():
+                redis_client.sadd(get_org_rooms_key(org_id), room_id.strip())
+
+    events = payload.get("events") or []
+    if isinstance(events, list):
+        for event in events:
+            if isinstance(event, dict):
+                redis_client.rpush(get_org_events_key(org_id), json.dumps(event))
+            elif isinstance(event, str) and event.strip():
+                redis_client.rpush(
+                    get_org_events_key(org_id),
+                    json.dumps({"title": event.strip()}),
+                )
+
+    return {
+        "id": org_id,
+        "name": name,
+        "slug": slug,
+        "url": url,
+        "rooms": [
+            room_id.decode()
+            for room_id in redis_client.smembers(get_org_rooms_key(org_id))
+        ],
+        "events": events,
+    }
+
+
+@app.get("/orgs")
+async def get_orgs(current_user: dict = Depends(get_current_user)):
+    """List organizations."""
+    org_ids = [org_id.decode() for org_id in redis_client.smembers(get_orgs_key())]
+    orgs = []
+    for org_id in org_ids:
+        data = redis_client.hgetall(get_org_key(org_id))
+        if not data:
+            continue
+        orgs.append(
+            {
+                "id": org_id,
+                "name": data.get(b"name", b"").decode(),
+                "slug": data.get(b"slug", b"").decode(),
+                "url": data.get(b"url", b"").decode() or None,
+            }
+        )
+    return {"orgs": orgs}
+
+
+@app.get("/orgs/{org_id}")
+async def get_org(org_id: str, current_user: dict = Depends(get_current_user)):
+    """Get organization details."""
+    data = redis_client.hgetall(get_org_key(org_id))
+    if not data:
+        raise HTTPException(status_code=404, detail="Organization not found")
+
+    rooms = [
+        room_id.decode()
+        for room_id in redis_client.smembers(get_org_rooms_key(org_id))
+    ]
+    event_items = [
+        json.loads(item.decode())
+        for item in redis_client.lrange(get_org_events_key(org_id), 0, -1)
+    ]
+
+    return {
+        "id": org_id,
+        "name": data.get(b"name", b"").decode(),
+        "slug": data.get(b"slug", b"").decode(),
+        "url": data.get(b"url", b"").decode() or None,
+        "owner": data.get(b"owner", b"").decode(),
+        "created_at": data.get(b"created_at", b"").decode(),
+        "rooms": rooms,
+        "events": event_items,
+    }
+
+
+@app.post("/orgs/{org_id}/rooms")
+async def add_org_room(
+    org_id: str, payload: dict, current_user: dict = Depends(get_current_user)
+):
+    """Add a room to an organization."""
+    room_id = (payload.get("room_id") or payload.get("roomId") or "").strip()
+    if not room_id:
+        raise HTTPException(status_code=400, detail="room_id is required")
+
+    if not redis_client.exists(get_org_key(org_id)):
+        raise HTTPException(status_code=404, detail="Organization not found")
+
+    redis_client.sadd(get_org_rooms_key(org_id), room_id)
+    return {"status": "ok", "room_id": room_id}
+
+
+@app.post("/orgs/{org_id}/events")
+async def add_org_event(
+    org_id: str, payload: dict, current_user: dict = Depends(get_current_user)
+):
+    """Add an event to an organization."""
+    if not redis_client.exists(get_org_key(org_id)):
+        raise HTTPException(status_code=404, detail="Organization not found")
+
+    if not isinstance(payload, dict) or not payload:
+        raise HTTPException(status_code=400, detail="Event payload is required")
+
+    redis_client.rpush(get_org_events_key(org_id), json.dumps(payload))
+    return {"status": "ok"}
 
 @app.get("/user/rooms")
 async def get_user_rooms(current_user: dict = Depends(get_current_user)):
@@ -549,6 +727,44 @@ async def get_rooms(current_user: list = Depends(get_current_user)):
             continue  # Skip keys that aren't hashes
     
     return all_rooms
+
+@app.post("/rooms")
+async def create_room(payload: dict, current_user: dict = Depends(get_current_user)):
+    """Create a room and add the creator as member/admin."""
+    user_id = current_user.get("sub")
+    if not user_id:
+        raise HTTPException(status_code=403, detail="Not authenticated")
+
+    name = (payload.get("name") or "").strip()
+    if not name:
+        raise HTTPException(status_code=400, detail="Room name is required")
+
+    room_id = (payload.get("id") or payload.get("room_id") or "").strip()
+    if not room_id:
+        room_id = str(uuid.uuid4())
+
+    room_key = get_room_key(room_id)
+    if redis_client.exists(room_key):
+        raise HTTPException(status_code=409, detail="Room already exists")
+
+    is_public = 1 if payload.get("is_public") else 0
+
+    new_room = {
+        "id": room_id,
+        "name": name,
+        "is_public": is_public,
+        "creator": user_id,
+    }
+    redis_client.hset(room_key, mapping=new_room)
+    redis_client.sadd(get_users_key(room_id), user_id)
+    redis_client.sadd(get_user_rooms_key(user_id), room_id)
+    redis_client.sadd(get_admins_key(room_id), user_id)
+
+    return {
+        "id": room_id,
+        "name": name,
+        "is_public": bool(is_public),
+    }
 
 @app.post("/rooms/{room_id}/join")
 async def join_room(room_id: str, current_user: dict = Depends(get_current_user)):

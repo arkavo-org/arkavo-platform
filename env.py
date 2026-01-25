@@ -17,6 +17,9 @@ keycloak_dir = os.path.join(current_dir, "keycloak")
 opentdf_dir = os.path.join(current_dir, "opentdf")
 nginx_dir = os.path.join(current_dir, "nginx")
 webapp_dir = os.path.join(current_dir, "webapp")
+webapp_build_dir = os.path.join(current_dir, "webapp_build")
+webapp_android_dir = os.path.join(current_dir, "webapp_android")
+opentdf_websdk_dir = os.path.join(current_dir, "opentdf-websdk")
 worldchat_dir = os.path.join(current_dir, "users", "worldchat")
 levatel_dir = os.path.join(current_dir, "..", "CodeCollective")
 org_dir = os.path.join(current_dir, "org")
@@ -32,6 +35,8 @@ iroh_dir = os.path.join(current_dir, "iroh")
 os.makedirs(nextcloud_data_root, exist_ok=True)
 os.makedirs(nextcloud_base_dir, exist_ok=True)
 os.makedirs(certs_dir, exist_ok=True)
+os.makedirs(webapp_build_dir, exist_ok=True)
+os.makedirs(webapp_android_dir, exist_ok=True)
 os.makedirs(iroh_dir, exist_ok=True)
 if "NEXTCLOUD_FQDN" not in globals():
     NEXTCLOUD_FQDN = "71.179.48.229"
@@ -185,7 +190,7 @@ opentdfdb = dict(
 opentdf = dict(
     image="julianfl0w/opentdf:1.0",
     detach=True,
-    command="start",
+    command=["start", "--config-file", "/app/opentdf.yaml"],
     name="opentdf",
     network=NETWORK_NAME,
     restart_policy={"Name": "always"},
@@ -203,8 +208,8 @@ opentdf = dict(
             "mode": "ro",
         },
         # f"{keys_dir}/keycloak-ca.pem": {"bind": "/etc/ssl/certs/ca-certificates.crt", "mode": "ro"},
-        f"{certs_dir}/keycloak-ca.pem": {
-            "bind": "/usr/local/share/ca-certificates/ca-certificates.crt",
+        f"{certs_dir}/keys/keycloak-ca.pem": {
+            "bind": "/etc/ssl/certs/ca-certificates.crt",
             "mode": "ro",
         },
         # Mount the CA key from nginx directory
@@ -364,6 +369,13 @@ webapp_build = dict(
     restart_policy={"Name": "no"},
     volumes={
         webapp_dir: {"bind": "/usr/src/app", "mode": "rw"},
+        opentdf_websdk_dir: {"bind": "/usr/src/opentdf-websdk", "mode": "rw"},
+        webapp_build_dir: {"bind": "/usr/src/app/dist", "mode": "rw"},
+        webapp_android_dir: {"bind": "/usr/src/app/android", "mode": "rw"},
+        os.path.join(webapp_build_dir, "node_modules"): {
+            "bind": "/usr/src/app/node_modules",
+            "mode": "rw",
+        },
         # "dist_volume": {"bind": "/usr/src/app/dist", "mode": "rw"},
     },
     working_dir="/usr/src/app",
@@ -379,6 +391,10 @@ webapp_build = dict(
     },
     command=(
         "sh -c '"
+        "cd /usr/src/opentdf-websdk/lib && "
+        "npm install && "
+        "npm run build && "
+        "cd /usr/src/app && "
         "npm install && "
         "npm run build --verbose && "
         "if [ ! -d android ]; then npx cap add android; fi && "
@@ -395,7 +411,12 @@ webapp_android_build = dict(
     restart_policy={"Name": "no"},
     volumes={
         webapp_dir: {"bind": "/usr/src/app", "mode": "rw"},
+        webapp_android_dir: {"bind": "/usr/src/app/android", "mode": "rw"},
         os.path.join(webapp_dir, ".gradle"): {"bind": "/root/.gradle", "mode": "rw"},
+        os.path.join(webapp_android_dir, "node_modules"): {
+            "bind": "/usr/src/app/node_modules",
+            "mode": "rw",
+        },
     },
     working_dir="/usr/src/app/android",
     command=(
@@ -437,6 +458,7 @@ webapp = dict(
     restart_policy={"Name": "always"},
     volumes={
         webapp_dir: {"bind": "/usr/src/app", "mode": "rw"},
+        opentdf_websdk_dir: {"bind": "/usr/src/opentdf-websdk", "mode": "rw"},
         # "dist_volume": {"bind": "/usr/src/app/dist", "mode": "rw"},
     },
     working_dir="/usr/src/app",
@@ -450,6 +472,10 @@ webapp = dict(
     },
     command=(
         'sh -c "'
+        "cd /usr/src/opentdf-websdk/lib && "
+        "npm install && "
+        "npm run build && "
+        "cd /usr/src/app && "
         "npm install && "
         "npm install -g nodemon && "
         "nodemon --watch . --exec 'npm run dev'\""
@@ -847,6 +873,14 @@ users_api = dict(
     detach=True,
     command=["python", "/app/users_api.py"],
 )
+if USER_WEBSITE == "localhost":
+    users_api["volumes"][os.path.join(certs_dir, "keys", "keycloak-ca.pem")] = {
+        "bind": "/etc/ssl/certs/keycloak-ca.pem",
+        "mode": "ro",
+    }
+    users_api.setdefault("environment", {})["REQUESTS_CA_BUNDLE"] = (
+        "/etc/ssl/certs/keycloak-ca.pem"
+    )
 
 redis = dict(
     image="redis:7.2-alpine",

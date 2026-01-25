@@ -1,14 +1,16 @@
 import React, { useState } from 'react';
-import { Routes, Route } from 'react-router-dom';
+import { Routes, Route, useParams } from 'react-router-dom';
 import Navbar from './Navbar';
 import Feed from './Feed';
 import VideoFeed from './VideoFeed';
 import Privacy from './Privacy';
 import ExploreRooms from './chat/ExploreRooms';
 import CreateRoom from './chat/CreateRoom';
+import CreateOrg from './CreateOrg';
+import OrgManagement from './OrgManagement';
 import Profile from './Profile';
 import Room from './chat/Room';
-import ChatPage from './chat/ChatPage';
+import YourChats from './chat/YourChats';
 import APIChat from './APIChat';
 import Events from './Events';
 import TDF from './TDF';
@@ -21,22 +23,17 @@ import { useAuth } from './context/AuthContext';
 
 interface AppRoutesProps {}
 
+const RoomRoute: React.FC = () => {
+    const { roomId } = useParams();
+    return <Room roomId={roomId || ''} />;
+};
+
 const AppRoutes: React.FC<AppRoutesProps> = () => {
     const [showProfileModal, setShowProfileModal] = useState(false);
     const { isAuthenticated, isLoading } = useAuth();
 
     if (isLoading) {
-        return (
-            <div className="promo-shell">
-                <div className="promo-hero">
-                    <div className="promo-hero-text">
-                        <span className="promo-kicker">Arkavo Secure Messaging</span>
-                        <h1>Establishing secure session</h1>
-                        <p>Validating credentials and policy for mission access.</p>
-                    </div>
-                </div>
-            </div>
-        );
+        return <Promo />;
     }
 
     if (!isAuthenticated) {
@@ -48,18 +45,17 @@ const AppRoutes: React.FC<AppRoutesProps> = () => {
             <Navbar onProfileClick={() => setShowProfileModal(true)} />
             <div className="app-content">
                 <Routes>
-                    <Route path="/" element={<ChatPage />} />
+                    <Route path="/" element={<YourChats />} />
                     <Route path="/privacy" element={<Privacy />} />
-                    <Route path="/chat" element={<ChatPage />} />
-                    <Route path="/chat/:roomId" element={<ChatPage />} />
+                    <Route path="/chat" element={<YourChats />} />
+                    <Route path="/chat/:roomId" element={<RoomRoute />} />
                     <Route path="/create-room" element={<CreateRoom />} />
+                    <Route path="/create-org" element={<CreateOrg />} />
+                    <Route path="/org/:orgId" element={<OrgManagement />} />
                     <Route path="/events" element={<Events />} />
                     <Route path="/feed" element={<Feed />} />
                     <Route path="/navbar" element={<Navbar onProfileClick={() => setShowProfileModal(true)} />} />
-                    <Route 
-                      path="/room/:roomId" 
-                      element={<Room roomId="" />}
-                    />
+                    <Route path="/room/:roomId" element={<RoomRoute />} />
                     <Route path="/video" element={<VideoFeed />} />
                     <Route 
                       path="/explore" 

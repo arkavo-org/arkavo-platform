@@ -263,3 +263,5 @@ keycloak/theme/login/resources/css/styles.css
 gitea
 static
 data
+webapp_android
+webapp_build

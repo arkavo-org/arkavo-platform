@@ -30,6 +30,24 @@ interface NotificationItem {
   timestamp?: string;
 }
 
+interface BrowsePerson {
+  id: string;
+  display: string;
+  picture?: string;
+}
+
+interface BrowseRoom {
+  id: string;
+  name: string;
+  is_public?: boolean;
+}
+
+interface BrowseOrg {
+  id: string;
+  name: string;
+  url?: string;
+}
+
 const Navbar: React.FC<NavbarProps> = ({ onProfileClick }) => {
   const { isAuthenticated, userProfile, login, logout, keycloak } = useAuth();
   const { ws } = useWebSocket();
@@ -50,6 +68,12 @@ const Navbar: React.FC<NavbarProps> = ({ onProfileClick }) => {
   const [notificationsError, setNotificationsError] = useState<string | null>(null);
   const [isMobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [isMobileSearchOpen, setMobileSearchOpen] = useState(false);
+  const [browseOpen, setBrowseOpen] = useState(false);
+  const [browseLoading, setBrowseLoading] = useState(false);
+  const [browseError, setBrowseError] = useState<string | null>(null);
+  const [browsePeople, setBrowsePeople] = useState<BrowsePerson[]>([]);
+  const [browseRooms, setBrowseRooms] = useState<BrowseRoom[]>([]);
+  const [browseOrgs, setBrowseOrgs] = useState<BrowseOrg[]>([]);
   const notificationRef = useRef<HTMLDivElement>(null);
   const searchRef = useRef<HTMLDivElement>(null);
 
@@ -63,6 +87,7 @@ const Navbar: React.FC<NavbarProps> = ({ onProfileClick }) => {
   const closeMobileOverlays = () => {
     setMobileMenuOpen(false);
     setMobileSearchOpen(false);
+    setBrowseOpen(false);
   };
 
   const handleNavigate = (path: string) => {
@@ -72,6 +97,96 @@ const Navbar: React.FC<NavbarProps> = ({ onProfileClick }) => {
 
   const buildDmRoomId = (userA: string, userB: string) =>
     [userA, userB].sort().join("_");
+
+  useEffect(() => {
+    const fetchBrowseData = async () => {
+      if (!keycloak?.token) return;
+      try {
+        setBrowseLoading(true);
+        setBrowseError(null);
+        if (keycloak.isTokenExpired()) {
+          await keycloak.updateToken(30);
+        }
+        const headers = {
+          Authorization: `Bearer ${keycloak.token}`,
+        };
+
+        const peoplePromise = fetch(
+          `${import.meta.env.VITE_USERS_API_URL}/people`,
+          { headers }
+        );
+        const roomsPromise = fetch(
+          `${import.meta.env.VITE_USERS_API_URL}/user/rooms`,
+          { headers }
+        );
+        const orgsPromise = fetch(
+          `${import.meta.env.VITE_USERS_API_URL}/orgs`,
+          { headers }
+        );
+
+        const [peopleRes, roomsRes, orgsRes] = await Promise.all([
+          peoplePromise,
+          roomsPromise,
+          orgsPromise,
+        ]);
+
+        if (peopleRes.ok) {
+          const data = await peopleRes.json();
+          const people = Array.isArray(data.people) ? data.people : [];
+          setBrowsePeople(
+            people
+              .map((p: any) => ({
+                id: p.uuid || p.id || p.userId || "",
+                display:
+                  p.display_name ||
+                  p.displayName ||
+                  p.name ||
+                  "Unknown user",
+                picture: p.picture,
+              }))
+              .filter((p: any) => p.id)
+          );
+        }
+
+        if (roomsRes.ok) {
+          const data = await roomsRes.json();
+          const rooms = Array.isArray(data.rooms) ? data.rooms : [];
+          setBrowseRooms(
+            rooms
+              .filter((room: any) => !String(room.id || "").includes("_"))
+              .map((room: any) => ({
+                id: room.id,
+                name: room.name || room.id,
+                is_public: room.is_public,
+              }))
+          );
+        }
+
+        if (orgsRes.ok) {
+          const data = await orgsRes.json();
+          const orgs = Array.isArray(data.orgs) ? data.orgs : [];
+          setBrowseOrgs(
+            orgs
+              .map((org: any) => ({
+                id: org.id || org.uuid || org.slug || "",
+                name: org.name || org.title || org.slug || "Unknown org",
+                url: org.url,
+              }))
+              .filter((org: any) => org.id)
+          );
+        }
+      } catch (error) {
+        console.error("Browse load failed:", error);
+        setBrowseError("Unable to load browse data");
+      } finally {
+        setBrowseLoading(false);
+      }
+    };
+
+    if (isAuthenticated && browseOpen) {
+      fetchBrowseData();
+    }
+  }, [browseOpen, isAuthenticated, keycloak]);
 
   const fetchNotifications = useCallback(async () => {
     if (!keycloak?.token) return;
@@ -348,6 +463,29 @@ const Navbar: React.FC<NavbarProps> = ({ onProfileClick }) => {
     }
   };
 
+  const handleBrowsePersonSelect = (userId: string) => {
+    const currentUserId = keycloak?.tokenParsed?.sub;
+    if (!currentUserId) return;
+    const roomId = buildDmRoomId(currentUserId, userId);
+    handleNavigate(`/chat/${roomId}`);
+    setBrowseOpen(false);
+  };
+
+  const handleBrowseRoomSelect = (roomId: string) => {
+    handleNavigate(`/chat/${roomId}`);
+    setBrowseOpen(false);
+  };
+
+  const handleBrowseOrgSelect = (org: BrowseOrg) => {
+    if (org.url) {
+      window.open(org.url, "_blank");
+      setBrowseOpen(false);
+      return;
+    }
+    handleNavigate(`/org/${org.id}`);
+    setBrowseOpen(false);
+  };
+
   return (
     <nav className="navbar">
       <div className="logo-container">
@@ -579,6 +717,18 @@ const Navbar: React.FC<NavbarProps> = ({ onProfileClick }) => {
             <button
               type="button"
               className="nav-trigger nav-item"
+              onClick={() => setBrowseOpen((prev) => !prev)}
+            >
+              <FontAwesomeIcon
+                icon={faBars}
+                className="icon"
+                title="Browse"
+              />
+              <span className="nav-label">People · Rooms · Orgs</span>
+            </button>
+            <button
+              type="button"
+              className="nav-trigger nav-item"
               onClick={() => handleNavigate("/events")}
             >
               <FontAwesomeIcon
@@ -587,6 +737,18 @@ const Navbar: React.FC<NavbarProps> = ({ onProfileClick }) => {
                 title="Events"
               />
               <span className="nav-label">Events</span>
+            </button>
+            <button
+              type="button"
+              className="nav-trigger nav-item"
+              onClick={() => handleNavigate("/create-org")}
+            >
+              <FontAwesomeIcon
+                icon={faPlusCircle}
+                className="icon events-icon"
+                title="Create Org"
+              />
+              <span className="nav-label">Create Org</span>
             </button>
             <button
               type="button"
@@ -626,6 +788,100 @@ const Navbar: React.FC<NavbarProps> = ({ onProfileClick }) => {
           <button onClick={login} className="sign-in-button nav-trigger nav-item">
             Sign In
           </button>
+        )}
+        {isAuthenticated && browseOpen && (
+          <div className="browse-panel">
+            {browseLoading && (
+              <div className="browse-message">Loading…</div>
+            )}
+            {browseError && (
+              <div className="browse-message error">{browseError}</div>
+            )}
+            {!browseLoading && !browseError && (
+              <>
+                <div className="browse-section">
+                  <div className="browse-title">People</div>
+                  {browsePeople.length === 0 ? (
+                    <div className="browse-row muted">No people found</div>
+                  ) : (
+                    browsePeople.slice(0, 6).map((person) => (
+                      <button
+                        key={person.id}
+                        className="browse-row"
+                        onClick={() => handleBrowsePersonSelect(person.id)}
+                      >
+                        <div className="browse-avatar">
+                          {person.picture ? (
+                            <img
+                              src={
+                                person.picture.startsWith("data:")
+                                  ? person.picture
+                                  : `data:image/jpeg;base64,${person.picture}`
+                              }
+                              alt={person.display}
+                            />
+                          ) : (
+                            <span>{person.display.charAt(0).toUpperCase()}</span>
+                          )}
+                        </div>
+                        <div className="browse-meta">
+                          <div className="browse-name">{person.display}</div>
+                        </div>
+                      </button>
+                    ))
+                  )}
+                </div>
+
+                <div className="browse-section">
+                  <div className="browse-title">Rooms</div>
+                  {browseRooms.length === 0 ? (
+                    <div className="browse-row muted">No rooms yet</div>
+                  ) : (
+                    browseRooms.slice(0, 6).map((room) => (
+                      <button
+                        key={room.id}
+                        className="browse-row"
+                        onClick={() => handleBrowseRoomSelect(room.id)}
+                      >
+                        <div className="browse-avatar room">
+                          <span>{(room.name || room.id).charAt(0).toUpperCase()}</span>
+                        </div>
+                        <div className="browse-meta">
+                          <div className="browse-name">{room.name}</div>
+                          <div className="browse-sub">
+                            {room.is_public ? "Public room" : "Private room"}
+                          </div>
+                        </div>
+                      </button>
+                    ))
+                  )}
+                </div>
+
+                <div className="browse-section">
+                  <div className="browse-title">Orgs</div>
+                  {browseOrgs.length === 0 ? (
+                    <div className="browse-row muted">No orgs yet</div>
+                  ) : (
+                    browseOrgs.slice(0, 6).map((org) => (
+                      <button
+                        key={org.id}
+                        className="browse-row"
+                        onClick={() => handleBrowseOrgSelect(org)}
+                      >
+                        <div className="browse-avatar org">
+                          <span>{(org.name || org.id).charAt(0).toUpperCase()}</span>
+                        </div>
+                        <div className="browse-meta">
+                          <div className="browse-name">{org.name}</div>
+                          <div className="browse-sub">{org.url || org.id}</div>
+                        </div>
+                      </button>
+                    ))
+                  )}
+                </div>
+              </>
+            )}
+          </div>
         )}
       </div>
 

@@ -1,7 +1,6 @@
 import React, { useRef, useState, useEffect } from "react";
 import { useAuth } from "../context/AuthContext";
 import "./MessageInput.css";
-import type { NanoTDFDatasetClient } from "@opentdf/sdk";
 
 interface Attachment {
   data: string; // base64 encoded
@@ -163,7 +162,7 @@ const MessageInput: React.FC<MessageInputProps> = ({
           return btoa(binary);
         }
 
-        message = arrayBufferToBase64(encryptedBuffer);
+        message = `TDF${arrayBufferToBase64(encryptedBuffer)}`;
 
         console.log("Encrypted message as JSON");
       } else {

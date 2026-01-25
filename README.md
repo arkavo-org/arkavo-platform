@@ -57,6 +57,16 @@ The Setup script can install
 5. **Verify installation**
    - Navigate to `https://yourhost/` to ensure the included frontend is running
 
+### Local HTTPS trust (required for localhost)
+When running locally, the stack uses a self-signed CA generated at `certs/keys/keycloak-ca.pem`. Your browser must trust this CA or you'll see `NET::ERR_CERT_AUTHORITY_INVALID` for `*.localhost`.
+
+Install the CA into your OS/browser trust store:
+- **Chrome/Brave (Linux/Windows)**: Settings → Privacy and security → Security → Manage certificates → Authorities → Import → select `certs/keys/keycloak-ca.pem` → check "Trust this certificate for identifying websites".
+- **Chrome (macOS)**: Keychain Access → System → File → Import Items… → select `certs/keys/keycloak-ca.pem` → set "Trust" to "Always Trust".
+- **Firefox**: Settings → Privacy & Security → Certificates → View Certificates → Authorities → Import → select `certs/keys/keycloak-ca.pem` → check "Trust this CA to identify websites".
+
+After importing, restart the browser and reload your local pages.
+
 ## 🏗️ Architecture
 
 Arkavo Platform integrates best-in-class tools for Security and AI, arranged to work together with minimal configuration.

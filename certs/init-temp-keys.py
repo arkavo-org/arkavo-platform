@@ -109,7 +109,13 @@ def generate_kas_certificates(output_dir: Path):
         "-out", str(output_dir / "kas-ec-cert.pem"),
         "-days", "365"
     ], "Generating KAS EC certificate")
-    
+
+    # Ensure files are readable by containers running as non-root.
+    for filename in ("kas-private.pem", "kas-ec-private.pem", "kas-cert.pem", "kas-ec-cert.pem"):
+        path = output_dir / filename
+        if path.exists():
+            path.chmod(0o644)
+
     # Clean up temporary file
     if os.path.exists("ecparams.tmp"):
         os.remove("ecparams.tmp")
@@ -122,6 +128,8 @@ def generate_keycloak_ca_and_certs(keys_dir: Path, domains: list):
     # Generate Keycloak CA certificate
     run_openssl_command([
         "openssl", "req", "-x509", "-nodes", "-newkey", "RSA:2048", "-subj", "/CN=ca",
+        "-addext", "basicConstraints=CA:TRUE",
+        "-addext", "keyUsage=keyCertSign,cRLSign",
         "-keyout", str(keys_dir / "keycloak-ca-private.pem"),
         "-out", str(keys_dir / "keycloak-ca.pem"),
         "-days", "365"
@@ -195,6 +203,19 @@ distinguished_name=req_distinguished_name
         "-out", str(keys_dir / "sampleuser.crt"),
         "-days", "3650"
     ], "Signing sample user certificate")
+
+    # Ensure files are readable by containers running as non-root.
+    for filename in (
+        "keycloak-ca-private.pem",
+        "keycloak-ca.pem",
+        "localhost.crt",
+        "localhost.key",
+        "sampleuser.crt",
+        "sampleuser.key",
+    ):
+        path = keys_dir / filename
+        if path.exists():
+            path.chmod(0o644)
     
     # Create PKCS12 keystore
     run_openssl_command([

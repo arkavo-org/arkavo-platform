@@ -67,6 +67,46 @@ def configure_container_extra_hosts(env_module) -> None:
 configure_container_extra_hosts(env)
 
 
+def configure_container_ca_trust(env_module) -> None:
+    if env_module.USER_WEBSITE != "localhost":
+        return
+
+    ca_path = os.path.join(env_module.keys_dir, "keycloak-ca.pem")
+    if not os.path.isfile(ca_path):
+        print(f"Local CA not found at {ca_path}; skipping container CA trust wiring")
+        return
+
+    for value in vars(env_module).values():
+        if not isinstance(value, dict):
+            continue
+        if "name" not in value or "image" not in value:
+            continue
+
+        volumes = value.get("volumes")
+        if volumes is None:
+            volumes = {}
+            value["volumes"] = volumes
+        if isinstance(volumes, dict):
+            volumes.setdefault(
+                ca_path, {"bind": "/etc/ssl/certs/keycloak-ca.pem", "mode": "ro"}
+            )
+        elif isinstance(volumes, list):
+            ca_mount = f"{ca_path}:/etc/ssl/certs/keycloak-ca.pem:ro"
+            if ca_mount not in volumes:
+                volumes.append(ca_mount)
+        else:
+            print(
+                f"Skipping CA mount for {value.get('name')} due to unsupported volumes type"
+            )
+        env_vars = value.setdefault("environment", {})
+        env_vars.setdefault("REQUESTS_CA_BUNDLE", "/etc/ssl/certs/keycloak-ca.pem")
+        env_vars.setdefault("SSL_CERT_FILE", "/etc/ssl/certs/keycloak-ca.pem")
+        env_vars.setdefault("CURL_CA_BUNDLE", "/etc/ssl/certs/keycloak-ca.pem")
+
+
+configure_container_ca_trust(env)
+
+
 def ensure_users_api_image(image_name: str) -> None:
     """Build the users-api Docker image if it is missing."""
     print(f"Checking for Docker image '{image_name}'")
@@ -82,6 +122,27 @@ def ensure_users_api_image(image_name: str) -> None:
     print(f"Docker image '{image_name}' not found. Building from users/Dockerfile...")
     subprocess.check_call(
         ["docker", "build", "-t", image_name, "."], cwd=os.path.join(here, "users")
+    )
+
+
+def ensure_opentdf_image(image_name: str) -> None:
+    """Build the OpenTDF Docker image from opentdf-platform/Dockerfile if missing."""
+    print(f"Checking for Docker image '{image_name}'")
+    inspect = subprocess.run(
+        ["docker", "image", "inspect", image_name],
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+    )
+    if inspect.returncode == 0:
+        print(f"Docker image '{image_name}' already exists")
+        return
+
+    print(
+        f"Docker image '{image_name}' not found. Building from opentdf-platform/Dockerfile..."
+    )
+    subprocess.check_call(
+        ["docker", "build", "-t", image_name, "-f", "Dockerfile", "."],
+        cwd=os.path.join(here, "opentdf-platform"),
     )
 
 # Check if the keys directory exists, if not, generate temporary keys for localhost or production keys
@@ -227,6 +288,7 @@ if "opentdf" in env.SERVICES_TO_RUN:
     except Exception:
         # Container doesn't exist or Docker isn't reporting it as running yet
         pass
+    ensure_opentdf_image(env.opentdf.get("image", "opentdf"))
     utils_docker.run_container(env.opentdfdb)
     utils_docker.wait_for_db(network=env.NETWORK_NAME, db_url="opentdfdb:5432")
     if not opentdf_container_running and False:

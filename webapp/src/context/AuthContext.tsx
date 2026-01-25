@@ -1,15 +1,17 @@
 import React, { createContext, useContext, ReactNode } from 'react';
 import Keycloak from 'keycloak-js';
 import { UserProfile } from '../components/AuthProvider';
-import { AuthProvider as TDFAuthProvider, HttpRequest, NanoTDFDatasetClient } from '@opentdf/sdk';
-import { DatasetConfig } from '@opentdf/sdk/nano';
+export interface TdfClient {
+  encrypt: (plainText: string) => Promise<ArrayBuffer>;
+  decrypt: (cipherText: ArrayBuffer) => Promise<ArrayBuffer>;
+}
 
 interface AuthContextType {
   isAuthenticated: boolean;
   isLoading: boolean;
   userProfile: UserProfile | null;
   keycloak: Keycloak | null;
-  tdfClient: NanoTDFDatasetClient | null;
+  tdfClient: TdfClient | null;
   login: () => Promise<void>;
   logout: () => Promise<void>;
   refreshToken: () => Promise<boolean>;

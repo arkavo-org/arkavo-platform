@@ -1,12 +1,9 @@
 import React, { useEffect, useState } from 'react';
 import { useAuth } from './context/AuthContext';
-import {AuthProvider, HttpRequest, NanoTDFDatasetClient} from '@opentdf/sdk';
-import {DatasetConfig} from "@opentdf/sdk/nano";
 
 const TDFContent: React.FC = () => {
-  const { keycloak } = useAuth();
+  const { keycloak, tdfClient } = useAuth();
   const [count, setCount] = useState(0);
-  const [tdfClient, setTdfClient] = useState<NanoTDFDatasetClient | null>(null);
   const [encryptedData, setEncryptedData] = useState<ArrayBuffer | null>(null);
   const [decryptedData, setDecryptedData] = useState<string | null>(null);
   const [status, setStatus] = useState<{
@@ -15,40 +12,13 @@ const TDFContent: React.FC = () => {
   }>({ type: null, message: null });
 
   useEffect(() => {
-    (async () => {
-      if (!keycloak?.authenticated) return;
-
-      try {
-        setStatus({ type: 'info', message: 'Initializing TDF client...' });
-
-        const authProvider: AuthProvider = {
-          async updateClientPublicKey(): Promise<void> {
-            // nothing
-            return
-          },
-          withCreds(httpReq: HttpRequest): Promise<HttpRequest> {
-            httpReq.headers.Authorization = `Bearer ${keycloak?.token}`;
-            return Promise.resolve(httpReq);
-          }
-        }
-        const client = new NanoTDFDatasetClient({
-          authProvider,
-          kasEndpoint: import.meta.env.VITE_KAS_ENDPOINT,
-        } as DatasetConfig);
-
-        setTdfClient(client);
-        setStatus({ type: 'success', message: 'TDF client initialized successfully' });
-      } catch (error) {
-        console.error('TDF initialization failed:', error);
-        setStatus({
-          type: 'error',
-          message: `Failed to initialize TDF client: ${
-            error instanceof Error ? error.message : 'Unknown error'
-          }`,
-        });
-      }
-    })();
-  }, [keycloak?.authenticated, keycloak?.token]);
+    if (!keycloak?.authenticated) return;
+    if (tdfClient) {
+      setStatus({ type: 'success', message: 'TDF client initialized successfully' });
+    } else {
+      setStatus({ type: 'info', message: 'Initializing TDF client...' });
+    }
+  }, [keycloak?.authenticated, tdfClient]);
 
   const handleEncrypt = async () => {
     if (!tdfClient) return;

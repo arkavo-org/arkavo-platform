@@ -6,7 +6,6 @@ import {
 } from "./indexedDBUtils";
 import { useAuth } from "../context/AuthContext";
 import { useWebSocket } from "../context/WebSocketContext";
-import type { NanoTDFDatasetClient } from "@opentdf/sdk";
 import RoomModal from "./RoomModal";
 import "../css/ChatPage.css";
 import Profile from "../Profile";
@@ -207,8 +206,18 @@ const Room: React.FC<RoomProps> = ({ roomId }) => {
       throw new Error("TDF client not available");
     }
 
-    // Convert base64 string back to ArrayBuffer
-    const binaryString = atob(content);
+    const payload = content.startsWith("TDF") ? content.slice(3) : content;
+    let binaryString: string;
+    try {
+      binaryString = atob(payload);
+    } catch (error) {
+      console.error("Invalid TDF payload encoding", error);
+      return {
+        content: {
+          text: "[Unable to decrypt message]",
+        },
+      };
+    }
     const bytes = new Uint8Array(binaryString.length);
     for (let i = 0; i < binaryString.length; i++) {
       bytes[i] = binaryString.charCodeAt(i);
@@ -533,7 +542,7 @@ const Room: React.FC<RoomProps> = ({ roomId }) => {
     const binary = Array.from(new Uint8Array(encryptedBuffer))
       .map((byte) => String.fromCharCode(byte))
       .join("");
-    return btoa(binary);
+    return `TDF${btoa(binary)}`;
   };
 
   const GetRoomCreateIfDNE = useCallback(

@@ -1,8 +1,8 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { AuthProvider as AuthContextProvider } from '../context/AuthContext';
 import Keycloak from "keycloak-js";
-import { AuthProvider as TDFAuthProvider, HttpRequest, NanoTDFDatasetClient } from '@opentdf/sdk';
-import { DatasetConfig } from '@opentdf/sdk/nano';
+import { OpenTDF, type AuthProvider as TdfAuthProvider, HttpRequest } from '@opentdf/sdk';
+import type { TdfClient } from '../context/AuthContext';
 
 // Configuration from environment variables
 const keycloakConfig = {
@@ -131,29 +131,136 @@ const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
-  const [tdfClient, setTdfClient] = useState<NanoTDFDatasetClient | null>(null);
+  const [tdfClient, setTdfClient] = useState<TdfClient | null>(null);
   const hasSyncedIdpImage = useRef(false);
 
   const initializeTdfClient = async () => {
     if (!keycloak?.authenticated) return;
 
     try {
-      const authProvider: TDFAuthProvider = {
-        async updateClientPublicKey(): Promise<void> {
-          return;
-        },
-        withCreds(httpReq: HttpRequest): Promise<HttpRequest> {
-          httpReq.headers.Authorization = `Bearer ${keycloak?.token}`;
-          return Promise.resolve(httpReq);
+      if (!keycloak?.token) {
+        return;
+      }
+
+      const oidcOrigin = `${import.meta.env.VITE_KEYCLOAK_SERVER_URL}/realms/${import.meta.env.VITE_KEYCLOAK_REALM}`;
+      const clientId = import.meta.env.VITE_KEYCLOAK_CLIENT_ID || "web-client";
+      const tokenEndpoint = `${oidcOrigin}/protocol/openid-connect/token`;
+      const useTokenExchange = import.meta.env.VITE_OPENTDF_USE_TOKEN_EXCHANGE === "true";
+      const exchangeAudience = import.meta.env.VITE_OPENTDF_AUDIENCE || "account";
+      let cachedToken: { value: string; exp?: number } | null = null;
+
+      const decodeExp = (token: string): number | undefined => {
+        try {
+          const [, payload] = token.split(".");
+          if (!payload) return undefined;
+          const decoded = JSON.parse(atob(payload));
+          return typeof decoded.exp === "number" ? decoded.exp : undefined;
+        } catch {
+          return undefined;
         }
       };
 
-      const client = new NanoTDFDatasetClient({
-        authProvider,
-        kasEndpoint: import.meta.env.VITE_KAS_ENDPOINT,
-      } as DatasetConfig);
+      const getKeycloakAccessToken = async (): Promise<string> => {
+        await keycloak.updateToken(30);
+        if (!keycloak.token) {
+          throw new Error("Keycloak access token is missing");
+        }
+        return keycloak.token;
+      };
 
-      setTdfClient(client);
+      const fetchExchangeToken = async (): Promise<string> => {
+        const subjectToken = await getKeycloakAccessToken();
+        const body = new URLSearchParams({
+          grant_type: "urn:ietf:params:oauth:grant-type:token-exchange",
+          subject_token: subjectToken,
+          subject_token_type: "urn:ietf:params:oauth:token-type:access_token",
+          audience: exchangeAudience,
+          client_id: clientId,
+        });
+        const response = await fetch(tokenEndpoint, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/x-www-form-urlencoded",
+          },
+          body,
+        });
+        if (!response.ok) {
+          const message = await response.text();
+          throw new Error(`Token exchange failed: ${response.status} ${message}`);
+        }
+        const data = await response.json();
+        if (!data.access_token) {
+          throw new Error("Token exchange did not return access_token");
+        }
+        cachedToken = { value: data.access_token, exp: decodeExp(data.access_token) };
+        return data.access_token;
+      };
+
+      const authProvider: TdfAuthProvider = {
+        async updateClientPublicKey(): Promise<void> {
+          return;
+        },
+        async withCreds(httpReq: HttpRequest): Promise<HttpRequest> {
+          const now = Math.floor(Date.now() / 1000);
+          if (cachedToken?.value && (!cachedToken.exp || cachedToken.exp - now > 60)) {
+            return {
+              ...httpReq,
+              headers: {
+                ...httpReq.headers,
+                Authorization: `Bearer ${cachedToken.value}`,
+              },
+            };
+          }
+          const accessToken = useTokenExchange
+            ? await fetchExchangeToken()
+            : await getKeycloakAccessToken();
+          return {
+            ...httpReq,
+            headers: {
+              ...httpReq.headers,
+              Authorization: `Bearer ${accessToken}`,
+            },
+          };
+        },
+      };
+
+      const kasEndpoint = import.meta.env.VITE_KAS_ENDPOINT as string | undefined;
+      const platformUrl = kasEndpoint
+        ? kasEndpoint.replace(/\/kas\/?$/, "")
+        : undefined;
+
+      const client = new OpenTDF({
+        authProvider,
+        platformUrl,
+        defaultCreateOptions: {
+          defaultKASEndpoint: kasEndpoint,
+        },
+      });
+
+      const adapter: TdfClient = {
+        async encrypt(plainText: string): Promise<ArrayBuffer> {
+          const stream = await client.createZTDF({
+            source: {
+              type: "buffer",
+              location: new TextEncoder().encode(plainText),
+            },
+            autoconfigure: false,
+            defaultKASEndpoint: kasEndpoint,
+          });
+          return new Response(stream).arrayBuffer();
+        },
+        async decrypt(cipherText: ArrayBuffer): Promise<ArrayBuffer> {
+          const stream = await client.read({
+            source: {
+              type: "buffer",
+              location: new Uint8Array(cipherText),
+            },
+          });
+          return new Response(stream).arrayBuffer();
+        },
+      };
+
+      setTdfClient(adapter);
       console.log('TDF client initialized successfully');
     } catch (error) {
       console.error('Failed to initialize TDF client:', error);

@@ -67,7 +67,7 @@
       "description" : "${role_default-roles}",
       "composite" : true,
       "composites" : {
-        "realm" : [ "offline_access", "uma_authorization" ],
+        "realm" : [ "offline_access", "uma_authorization", "opentdf-standard" ],
         "client" : {
           "account" : [ "manage-account", "view-profile" ]
         }

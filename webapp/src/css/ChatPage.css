@@ -44,6 +44,13 @@ html, body {
     overflow-y: auto;
 }
 
+.room-list {
+    display: flex;
+    flex-direction: column;
+    padding: 16px;
+    gap: 8px;
+}
+
 .room-item {
     display: flex;
     align-items: center;
@@ -755,19 +762,16 @@ html, body {
 
 .mobile-sidebar-toggle {
     display: none;
-    padding: 12px 16px;
-    border-bottom: 1px solid #333;
-    background: linear-gradient(180deg, #1f1f1f, #161616);
 }
 
 .mobile-sidebar-toggle button {
-    width: 100%;
     background: var(--arkavo-dark-orange, #f99742);
     color: #1a1a1a;
-    font-weight: 600;
-    padding: 12px;
-    border-radius: 10px;
+    font-weight: 700;
+    padding: 12px 16px;
+    border-radius: 0 12px 12px 0;
     border: none;
+    box-shadow: 0 10px 24px rgba(0, 0, 0, 0.35);
 }
 
 .sidebar-overlay {
@@ -823,6 +827,11 @@ html, body {
 
     .mobile-sidebar-toggle {
         display: block;
+        position: fixed;
+        left: 0;
+        top: 50%;
+        transform: translateY(-50%);
+        z-index: 1100;
     }
 
   .room-actions {
