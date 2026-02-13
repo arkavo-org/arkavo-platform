@@ -85,10 +85,11 @@ GITEA_BASE_URL = "gitea." + BACKEND_LOCATION
 WHISPER_BASE_URL = "whisper." + BACKEND_LOCATION
 STATIC_BASE_URL = "static." + BACKEND_LOCATION
 USERS_BASE_URL = "users." + BACKEND_LOCATION
-BALLOT_BASE_URL = "ballot." + BACKEND_LOCATION
 NEXTCLOUD_BASE_URL = "nextcloud." + BACKEND_LOCATION
 IROH_BASE_URL = "iroh." + BACKEND_LOCATION
 IROH_CONTAINER_NAME = "iroh_arkavo"
+BALLOT_BASE_URL = "ballot." + BACKEND_LOCATION
+CCPORTAL_BASE_URL = "portal." + BACKEND_LOCATION
 
 KEYCLOAK_HOST = "https://" + KEYCLOAK_BASE_URL
 PROTOCOL_OPENTDF_BASE_URL = "https://" + OPENTDF_BASE_URL
@@ -355,6 +356,7 @@ nginx = dict(
     ports={
         "80/tcp": 80,  # equivalent to -p 80:80
         "443/tcp": 443,  # equivalent to -p 443:443
+        "2222/tcp": 2222,  # SSH proxy to ccportal-vm
         "6667/tcp": 6667,
         "8443/tcp": 8443,
         "8448/tcp": 8448,

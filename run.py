@@ -23,6 +23,80 @@ util.writeViteEnv(vars(env))
 
 EXTRA_HOST_TARGET = os.getenv("ARKAVO_EXTRA_HOST_TARGET", "host-gateway")
 GATEWAY_ALIAS = os.getenv("ARKAVO_GATEWAY_ALIAS", "host.docker.internal")
+BALLOT_VM_NAME = os.getenv("ARKAVO_BALLOT_VM_NAME", "ballot-vm")
+BALLOT_VM_HOSTNAME = os.getenv("ARKAVO_BALLOT_VM_HOSTNAME", "ballot-vm.local")
+CCPORTAL_VM_NAME = os.getenv("ARKAVO_CCPORTAL_VM_NAME", "ccportal-vm")
+CCPORTAL_VM_HOSTNAME = os.getenv("ARKAVO_CCPORTAL_VM_HOSTNAME", "ccportal-vm.local")
+
+
+def _pick_vm_ipv4(addresses: list[str]) -> str | None:
+    if not addresses:
+        return None
+    for addr in addresses:
+        if addr.startswith(("172.", "127.", "169.254.")):
+            continue
+        return addr
+    return addresses[0]
+
+
+def configure_vm_host(
+    env_module,
+    vm_name: str,
+    vm_hostname: str,
+    env_ip_var: str,
+    label: str,
+) -> None:
+    env_ip = os.getenv(env_ip_var)
+    vm_ip = None
+    multipass_available = True
+    try:
+        info = subprocess.run(
+            ["multipass", "info", vm_name, "--format", "json"],
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+    except FileNotFoundError:
+        multipass_available = False
+        info = None
+
+    if multipass_available and info is not None:
+        if info.returncode != 0:
+            print(f"Multipass info failed; falling back to {env_ip_var} if set")
+            multipass_available = False
+        else:
+            try:
+                payload = json.loads(info.stdout)
+                instance = payload.get("info", {}).get(vm_name, {})
+                vm_ip = _pick_vm_ipv4(instance.get("ipv4", []))
+            except Exception:
+                vm_ip = None
+    if not vm_ip and env_ip:
+        vm_ip = env_ip
+
+    if not vm_ip:
+        print(f"No {label} VM IP discovered; skipping {vm_hostname} host mapping")
+        return
+    if env_ip and env_ip != vm_ip:
+        print(
+            f"{label} VM IP override {env_ip} differs from Multipass ({vm_ip}); using Multipass"
+        )
+
+    nginx_cfg = getattr(env_module, "nginx", None)
+    if isinstance(nginx_cfg, dict):
+        extra_hosts = nginx_cfg.setdefault("extra_hosts", {})
+        extra_hosts[vm_hostname] = vm_ip
+        print(f"Mapped {vm_hostname} -> {vm_ip} for nginx extra_hosts")
+
+
+configure_vm_host(env, BALLOT_VM_NAME, BALLOT_VM_HOSTNAME, "ARKAVO_BALLOT_VM_IP", "ballot")
+configure_vm_host(
+    env,
+    CCPORTAL_VM_NAME,
+    CCPORTAL_VM_HOSTNAME,
+    "ARKAVO_CCPORTAL_VM_IP",
+    "ccportal",
+)
 
 
 def _collect_public_hostnames(env_module) -> list[str]:

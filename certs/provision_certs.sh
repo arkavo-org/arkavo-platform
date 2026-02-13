@@ -1,0 +1,1 @@
+sudo -E python provision_certs.py --mode nginx

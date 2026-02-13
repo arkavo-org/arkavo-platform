@@ -63,4 +63,6 @@ REDIS_PASSWORD = "PamdRkw5Bg5ae73"
 nextcloud_data_root = os.path.join(current_dir, "data")
 nextcloud_base_dir = os.path.join(nextcloud_data_root, "nextcloud")
 
-certbot_ssl_home = "/etc/letsencrypt/live/arkavo.org-0001/"
+certbot_ssl_home = os.path.abspath(
+    os.path.join(os.path.dirname(__file__), "certs", "letsencrypt", "live", BACKEND_LOCATION)
+)

@@ -159,6 +159,9 @@ def run_certbot_host(
     dry_run: bool,
     pre_hook: str | None,
     post_hook: str | None,
+    letsencrypt_dir: str,
+    work_dir: str,
+    logs_dir: str,
     cert_name: str | None,
     reuse_existing: bool,
 ) -> None:
@@ -166,7 +169,20 @@ def run_certbot_host(
     if not domains:
         raise ValueError("At least one domain is required for Certbot")
 
-    cmd = [certbot_bin, "certonly", "--non-interactive", "--agree-tos", "--email", email]
+    cmd = [
+        certbot_bin,
+        "certonly",
+        "--non-interactive",
+        "--agree-tos",
+        "--email",
+        email,
+        "--config-dir",
+        letsencrypt_dir,
+        "--work-dir",
+        work_dir,
+        "--logs-dir",
+        logs_dir,
+    ]
     if staging:
         cmd.append("--staging")
 
@@ -197,6 +213,48 @@ def run_certbot_host(
     LOG.info("Requesting certificates for: %s", ", ".join(domains))
     LOG.debug("Running command: %s", " ".join(shlex.quote(part) for part in cmd))
     subprocess.run(cmd, check=True)
+
+
+def ensure_stable_lineage(lets_encrypt_dir: str, cert_name: str) -> None:
+    """Ensure live/<cert_name> points at an existing lineage directory."""
+    live_dir = Path(lets_encrypt_dir) / "live"
+    target = live_dir / cert_name
+    if not live_dir.exists():
+        return
+
+    if target.exists():
+        if (target / "fullchain.pem").exists() and (target / "privkey.pem").exists():
+            return
+        if not target.is_symlink():
+            LOG.warning(
+                "Certbot lineage path %s exists but is not a symlink and is missing expected files; leaving as-is.",
+                target,
+            )
+            return
+
+    candidates: list[Path] = []
+    for entry in live_dir.iterdir():
+        if not entry.is_dir():
+            continue
+        if entry.name == cert_name or entry.name.startswith(f"{cert_name}-"):
+            if (entry / "fullchain.pem").exists() and (entry / "privkey.pem").exists():
+                candidates.append(entry)
+
+    if not candidates:
+        return
+
+    if any(entry.name == cert_name for entry in candidates):
+        chosen = next(entry for entry in candidates if entry.name == cert_name)
+    else:
+        chosen = max(candidates, key=lambda p: p.stat().st_mtime)
+
+    try:
+        if target.exists() or target.is_symlink():
+            target.unlink()
+        target.symlink_to(chosen)
+        LOG.info("Linked %s -> %s", target, chosen)
+    except OSError as exc:
+        LOG.warning("Could not link %s -> %s (%s)", target, chosen, exc)
 
 
 def run_hook_command(command: str | None, label: str, dry_run: bool) -> None:
@@ -292,9 +350,22 @@ def build_host_renew_command(
     reload_command: str,
     pre_hook: str | None,
     post_hook: str | None,
+    letsencrypt_dir: str,
+    work_dir: str,
+    logs_dir: str,
 ) -> str:
     """Construct the renew command for cron when using the host Certbot binary."""
-    cmd = [certbot_bin, "renew", "--quiet"]
+    cmd = [
+        certbot_bin,
+        "renew",
+        "--quiet",
+        "--config-dir",
+        letsencrypt_dir,
+        "--work-dir",
+        work_dir,
+        "--logs-dir",
+        logs_dir,
+    ]
     if mode == "standalone":
         if pre_hook:
             cmd.extend(["--pre-hook", pre_hook])
@@ -388,8 +459,14 @@ def determine_mode(args: argparse.Namespace, certbot_bin: str) -> str:
         return "dns"
 
     requested = args.mode
+    is_root = hasattr(os, "geteuid") and os.geteuid() == 0
 
     if requested == "nginx":
+        if not is_root:
+            raise RuntimeError(
+                "Certbot nginx mode requires root privileges. "
+                "Re-run with sudo or use --mode docker/standalone."
+            )
         if ensure_nginx_ready(certbot_bin, args.skip_plugin_install):
             return "nginx"
         raise RuntimeError("Certbot nginx plugin is not available and automatic installation failed")
@@ -402,8 +479,8 @@ def determine_mode(args: argparse.Namespace, certbot_bin: str) -> str:
     if requested == "standalone":
         return "standalone"
 
-    # Auto mode: try nginx plugin, then docker, then standalone.
-    if ensure_nginx_ready(certbot_bin, args.skip_plugin_install):
+    # Auto mode: try nginx plugin (root only), then docker, then standalone.
+    if is_root and ensure_nginx_ready(certbot_bin, args.skip_plugin_install):
         return "nginx"
 
     if shutil.which(args.docker_bin):
@@ -491,17 +568,17 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         "--letsencrypt-dir",
-        default="/etc/letsencrypt",
+        default=str(Path(__file__).resolve().parent / "letsencrypt"),
         help="Directory where certificates are stored (default: %(default)s)",
     )
     parser.add_argument(
         "--letsencrypt-work-dir",
-        default="/var/lib/letsencrypt",
+        default=str(Path(__file__).resolve().parent / "letsencrypt-work"),
         help="Certbot work directory (default: %(default)s)",
     )
     parser.add_argument(
         "--letsencrypt-logs-dir",
-        default="/var/log/letsencrypt",
+        default=str(Path(__file__).resolve().parent / "letsencrypt-logs"),
         help="Certbot logs directory (default: %(default)s)",
     )
     parser.add_argument(
@@ -623,9 +700,14 @@ def main() -> None:
                     dry_run=args.dry_run,
                     pre_hook=pre_hook,
                     post_hook=post_hook,
+                    letsencrypt_dir=args.letsencrypt_dir,
+                    work_dir=args.letsencrypt_work_dir,
+                    logs_dir=args.letsencrypt_logs_dir,
                     cert_name=cert_name,
                     reuse_existing=reuse_existing,
                 )
+            if not args.dry_run:
+                ensure_stable_lineage(args.letsencrypt_dir, cert_name)
         except subprocess.CalledProcessError as exc:
             LOG.error("Certbot failed with exit code %s", exc.returncode)
             main_exc = exc
@@ -649,6 +731,9 @@ def main() -> None:
                         reload_command=args.reload_command,
                         pre_hook=pre_hook,
                         post_hook=post_hook,
+                        letsencrypt_dir=args.letsencrypt_dir,
+                        work_dir=args.letsencrypt_work_dir,
+                        logs_dir=args.letsencrypt_logs_dir,
                     )
 
                 ensure_renewal_cron(
@@ -729,7 +814,7 @@ def stop_system_nginx_service() -> bool:
     if pkill:
         LOG.info("Attempting to stop any remaining nginx processes with pkill")
         # Use pkill to find and kill processes named 'nginx'. RC 1 means no process found.
-        result = subprocess.run([pkill, "-f", "nginx"], check=False)
+        result = subprocess.run(["sudo", pkill, "-f", "nginx"], check=False)
         if result.returncode == 0:
             LOG.info("Successfully terminated nginx process(es) with pkill.")
             stopped = True
