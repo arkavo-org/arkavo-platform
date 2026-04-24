@@ -7,3 +7,6 @@
 [submodule "opentdf-websdk"]
 	path = opentdf-websdk
 	url = https://github.com/opentdf/web-sdk
+[submodule "PIdP"]
+	path = PIdP
+	url = https://github.com/juliancoy/PIdP.git
