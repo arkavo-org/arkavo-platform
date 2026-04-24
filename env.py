@@ -88,8 +88,9 @@ USERS_BASE_URL = "users." + BACKEND_LOCATION
 NEXTCLOUD_BASE_URL = "nextcloud." + BACKEND_LOCATION
 IROH_BASE_URL = "iroh." + BACKEND_LOCATION
 IROH_CONTAINER_NAME = "iroh_arkavo"
-BALLOT_BASE_URL = "ballot." + BACKEND_LOCATION
 CCPORTAL_BASE_URL = "portal." + BACKEND_LOCATION
+PIDP_BASE_URL = "pidp." + BACKEND_LOCATION
+PIDP_DEV_BASE_URL = "dev.pidp." + BACKEND_LOCATION
 
 KEYCLOAK_HOST = "https://" + KEYCLOAK_BASE_URL
 PROTOCOL_OPENTDF_BASE_URL = "https://" + OPENTDF_BASE_URL
@@ -782,6 +783,30 @@ whisper = dict(
     },
     volumes={
         whisper_data_dir: {"bind": "/root/.cache", "mode": "rw"},  # Changed mount point
+    },
+)
+
+minio = dict(
+    image="minio/minio:latest",
+    name="minio",
+    detach=True,
+    network=NETWORK_NAME,
+    restart_policy={"Name": "unless-stopped"},
+    command=["server", "/data", "--console-address", ":9001"],
+    environment={
+        "MINIO_ROOT_USER": "minio",
+        "MINIO_ROOT_PASSWORD": "changeme",
+    },
+    volumes={
+        "minio"
+        + distinguisher: {
+            "bind": "/data",
+            "mode": "rw",
+        }
+    },
+    ports={
+        "9000/tcp": 9000,
+        "9001/tcp": 9001,
     },
 )
 

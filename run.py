@@ -23,8 +23,6 @@ util.writeViteEnv(vars(env))
 
 EXTRA_HOST_TARGET = os.getenv("ARKAVO_EXTRA_HOST_TARGET", "host-gateway")
 GATEWAY_ALIAS = os.getenv("ARKAVO_GATEWAY_ALIAS", "host.docker.internal")
-BALLOT_VM_NAME = os.getenv("ARKAVO_BALLOT_VM_NAME", "ballot-vm")
-BALLOT_VM_HOSTNAME = os.getenv("ARKAVO_BALLOT_VM_HOSTNAME", "ballot-vm.local")
 CCPORTAL_VM_NAME = os.getenv("ARKAVO_CCPORTAL_VM_NAME", "ccportal-vm")
 CCPORTAL_VM_HOSTNAME = os.getenv("ARKAVO_CCPORTAL_VM_HOSTNAME", "ccportal-vm.local")
 
@@ -89,7 +87,6 @@ def configure_vm_host(
         print(f"Mapped {vm_hostname} -> {vm_ip} for nginx extra_hosts")
 
 
-configure_vm_host(env, BALLOT_VM_NAME, BALLOT_VM_HOSTNAME, "ARKAVO_BALLOT_VM_IP", "ballot")
 configure_vm_host(
     env,
     CCPORTAL_VM_NAME,
@@ -332,14 +329,34 @@ if "users" in env.SERVICES_TO_RUN:
     utils_docker.run_container(env.redis)
     utils_docker.run_container(env.users_api)
 
-# --- BALLOT ---
-if "ballot" in env.SERVICES_TO_RUN:
-    utils_docker.run_container(env.ballot_redis)
-    utils_docker.run_container(env.ballot_backend)
-
 # --- IROH ---
 if "iroh" in env.SERVICES_TO_RUN:
     utils_docker.run_container(env.iroh)
+
+# --- MINIO ---
+if "minio" in env.SERVICES_TO_RUN:
+    utils_docker.run_container(env.minio)
+
+# --- PIdP ---
+if "pidp" in env.SERVICES_TO_RUN:
+    print("Running PIdP stack")
+    if hasattr(env, "minio"):
+        utils_docker.run_container(env.minio)
+    pidp_run_path = os.path.join(here, "PIdP", "run.py")
+    if os.path.isfile(pidp_run_path):
+        pidp_env = os.environ.copy()
+        pidp_base_url = getattr(env, "PIDP_BASE_URL", "")
+        pidp_dev_base_url = getattr(env, "PIDP_DEV_BASE_URL", "")
+        if pidp_base_url:
+            pidp_env["PIDP_PROD_PUBLIC_BASE_URL"] = f"https://{pidp_base_url}/"
+        if pidp_dev_base_url:
+            pidp_env["PIDP_DEV_PUBLIC_BASE_URL"] = f"https://{pidp_dev_base_url}/"
+        subprocess.check_call(
+            [sys.executable, pidp_run_path, env.distinguisher, env.NETWORK_NAME],
+            env=pidp_env,
+        )
+    else:
+        print(f"Warning: PIdP run.py not found at {pidp_run_path}")
 
 # --- NGINX ---
 if "nginx" in env.SERVICES_TO_RUN:

@@ -44,7 +44,7 @@ DEFAULT_ENV_PATH = REPO_ROOT / "env.py"
 
 # Capture assignments such as `KEYCLOAK_BASE_URL = "keycloak." + BACKEND_LOCATION`
 SUBDOMAIN_PATTERN = re.compile(
-    r'=\s*"(?P<prefix>[\w-]+)\."\s*\+\s*(?P<base>BACKEND_LOCATION|GPU_BACKEND_LOCATION|USER_WEBSITE)',
+    r'=\s*"(?P<prefix>[\w.-]+)\."\s*\+\s*(?P<base>BACKEND_LOCATION|GPU_BACKEND_LOCATION|USER_WEBSITE)',
     re.IGNORECASE,
 )
 

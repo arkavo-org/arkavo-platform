@@ -175,9 +175,30 @@ def stop_container(container_name):
     except:
         print("Couldn't stop container {container_name}. Maybe its not running")
 
+def rebuild_image(config):
+    build_config = config.get("build")
+    if not build_config:
+        raise ValueError(f"Container {config['name']} requested rebuild without a build configuration")
+
+    image_name = config["image"]
+    context = build_config["context"]
+    dockerfile = build_config.get("dockerfile")
+
+    cmd = ["docker", "build", "-t", image_name]
+    if dockerfile:
+        cmd.extend(["-f", dockerfile])
+    cmd.append(".")
+
+    print(f"Rebuilding image '{image_name}' from {context}")
+    subprocess.check_call(cmd, cwd=context)
+
 def run_container(config):
     print(f'\033[4;32mRunning container {config["name"]}\033[0m')
     container_name = config["name"]
+    run_config = dict(config)
+    rebuild_on_restart = run_config.pop("rebuild_image_on_restart", False)
+    run_config.pop("build", None)
+    should_rebuild = False
     # Get the container
     try:
         container = DOCKER_CLIENT.containers.get(container_name)
@@ -193,11 +214,16 @@ def run_container(config):
         print("Removing")
         container.remove()
         print("Running container!")
+        should_rebuild = rebuild_on_restart
     except:
         print(f"No container is running with name {container_name}")
+        should_rebuild = rebuild_on_restart
+
+    if should_rebuild:
+        rebuild_image(config)
     # Now run it
     print(f"Starting {container_name}")
-    return DOCKER_CLIENT.containers.run(**config)
+    return DOCKER_CLIENT.containers.run(**run_config)
 
 
 def wait_for_db(network, db_url, db_user="postgres", max_attempts=30, delay=2):
