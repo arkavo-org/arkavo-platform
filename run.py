@@ -1,4 +1,3 @@
-import json
 import os
 import subprocess
 import sys
@@ -23,79 +22,28 @@ util.writeViteEnv(vars(env))
 
 EXTRA_HOST_TARGET = os.getenv("ARKAVO_EXTRA_HOST_TARGET", "host-gateway")
 GATEWAY_ALIAS = os.getenv("ARKAVO_GATEWAY_ALIAS", "host.docker.internal")
-CCPORTAL_VM_NAME = os.getenv("ARKAVO_CCPORTAL_VM_NAME", "ccportal-vm")
-CCPORTAL_VM_HOSTNAME = os.getenv("ARKAVO_CCPORTAL_VM_HOSTNAME", "ccportal-vm.local")
 
 
-def _pick_vm_ipv4(addresses: list[str]) -> str | None:
-    if not addresses:
-        return None
-    for addr in addresses:
-        if addr.startswith(("172.", "127.", "169.254.")):
-            continue
-        return addr
-    return addresses[0]
-
-
-def configure_vm_host(
-    env_module,
-    vm_name: str,
-    vm_hostname: str,
-    env_ip_var: str,
-    label: str,
-) -> None:
-    env_ip = os.getenv(env_ip_var)
-    vm_ip = None
-    multipass_available = True
+def _read_pidp_access_key() -> str:
+    env_path = os.path.join(here, ".env.pidp")
+    if not os.path.isfile(env_path):
+        return ""
     try:
-        info = subprocess.run(
-            ["multipass", "info", vm_name, "--format", "json"],
-            check=False,
-            capture_output=True,
-            text=True,
-        )
-    except FileNotFoundError:
-        multipass_available = False
-        info = None
-
-    if multipass_available and info is not None:
-        if info.returncode != 0:
-            print(f"Multipass info failed; falling back to {env_ip_var} if set")
-            multipass_available = False
-        else:
-            try:
-                payload = json.loads(info.stdout)
-                instance = payload.get("info", {}).get(vm_name, {})
-                vm_ip = _pick_vm_ipv4(instance.get("ipv4", []))
-            except Exception:
-                vm_ip = None
-    if not vm_ip and env_ip:
-        vm_ip = env_ip
-
-    if not vm_ip:
-        print(f"No {label} VM IP discovered; skipping {vm_hostname} host mapping")
-        return
-    if env_ip and env_ip != vm_ip:
-        print(
-            f"{label} VM IP override {env_ip} differs from Multipass ({vm_ip}); using Multipass"
-        )
-
-    nginx_cfg = getattr(env_module, "nginx", None)
-    if isinstance(nginx_cfg, dict):
-        extra_hosts = nginx_cfg.setdefault("extra_hosts", {})
-        extra_hosts[vm_hostname] = vm_ip
-        print(f"Mapped {vm_hostname} -> {vm_ip} for nginx extra_hosts")
-
-
-configure_vm_host(
-    env,
-    CCPORTAL_VM_NAME,
-    CCPORTAL_VM_HOSTNAME,
-    "ARKAVO_CCPORTAL_VM_IP",
-    "ccportal",
-)
-
-
+        with open(env_path, "r", encoding="utf-8") as handle:
+            for raw_line in handle:
+                line = raw_line.strip()
+                if not line or line.startswith("#"):
+                    continue
+                if "=" in line:
+                    _, value = line.split("=", 1)
+                    token = value.strip().strip('"').strip("'")
+                else:
+                    token = line
+                if token:
+                    return token
+    except Exception:
+        return ""
+    return ""
 def _collect_public_hostnames(env_module) -> list[str]:
     hostnames = set()
     for key, value in vars(env_module).items():
@@ -274,7 +222,68 @@ if "nextcloud" in env.SERVICES_TO_RUN:
 
 # --- ORG ---
 if "org" in env.SERVICES_TO_RUN:
-    utils_docker.run_container(env.org)
+    print("Running Org stack")
+    org_run_path = os.path.join(here, "org", "run.py")
+    if os.path.isfile(org_run_path):
+        org_env = os.environ.copy()
+        org_base_url = getattr(env, "ORG_BASE_URL", "")
+        org_dev_base_url = getattr(env, "ORG_DEV_BASE_URL", "")
+        if org_base_url:
+            org_env["ORG_PROD_PUBLIC_BASE_URL"] = f"https://{org_base_url}/"
+        if org_dev_base_url:
+            org_env["ORG_DEV_PUBLIC_BASE_URL"] = f"https://{org_dev_base_url}/"
+        pidp_dev_base_url = getattr(env, "PIDP_DEV_BASE_URL", "")
+        if pidp_dev_base_url:
+            org_env["ORG_PIDP_BASE_URL"] = f"https://{pidp_dev_base_url}"
+            org_env["ORG_PIDP_JWKS_URL"] = f"https://{pidp_dev_base_url}/.well-known/jwks.json"
+        org_prod_image = getattr(env, "ORG_PROD_IMAGE", "")
+        if org_prod_image:
+            org_env["ORG_PROD_IMAGE"] = org_prod_image
+        org_dev_image = getattr(env, "ORG_DEV_IMAGE", "")
+        if org_dev_image:
+            org_env["ORG_DEV_IMAGE"] = org_dev_image
+        subprocess.check_call(
+            [sys.executable, org_run_path, env.distinguisher, env.NETWORK_NAME],
+            env=org_env,
+        )
+    else:
+        utils_docker.run_container(env.org)
+
+
+# --- ORG PORTAL ---
+if "orgportal" in env.SERVICES_TO_RUN:
+    print("Running OrgPortal stack")
+    orgportal_run_path = os.path.join(here, "OrgPortal", "run.py")
+    if os.path.isfile(orgportal_run_path):
+        portal_env = os.environ.copy()
+        pidp_access_key = _read_pidp_access_key()
+        portal_base_url = getattr(env, "ORGPORTAL_BASE_URL", "") or getattr(env, "CCPORTAL_BASE_URL", "")
+        portal_dev_base_url = getattr(env, "ORGPORTAL_DEV_BASE_URL", "") or getattr(env, "CCPORTAL_DEV_BASE_URL", "")
+        if portal_base_url:
+            portal_env["ORGPORTAL_PROD_PUBLIC_BASE_URL"] = f"https://{portal_base_url}/"
+        if portal_dev_base_url:
+            portal_env["ORGPORTAL_DEV_PUBLIC_BASE_URL"] = f"https://{portal_dev_base_url}/"
+        pidp_base_url = getattr(env, "PIDP_BASE_URL", "")
+        pidp_dev_base_url = getattr(env, "PIDP_DEV_BASE_URL", "")
+        if pidp_base_url:
+            portal_env["ORGPORTAL_PROD_PIDP_BASE_URL"] = f"https://{pidp_base_url}"
+        if pidp_dev_base_url:
+            portal_env["ORGPORTAL_DEV_PIDP_BASE_URL"] = f"https://{pidp_dev_base_url}"
+        if pidp_access_key:
+            portal_env["PIDP_PAT"] = pidp_access_key
+            portal_env["ORGPORTAL_PIDP_PAT"] = pidp_access_key
+        orgportal_prod_image = getattr(env, "ORGPORTAL_PROD_IMAGE", "")
+        if orgportal_prod_image:
+            portal_env["ORGPORTAL_PROD_IMAGE"] = orgportal_prod_image
+        orgportal_dev_image = getattr(env, "ORGPORTAL_DEV_IMAGE", "")
+        if orgportal_dev_image:
+            portal_env["ORGPORTAL_DEV_IMAGE"] = orgportal_dev_image
+        subprocess.check_call(
+            [sys.executable, orgportal_run_path, env.distinguisher, env.NETWORK_NAME],
+            env=portal_env,
+        )
+    else:
+        print("OrgPortal submodule missing run.py; skipping OrgPortal launch")
 
     
 # --- MATRIX SYNAPSE ---

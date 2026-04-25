@@ -10,3 +10,12 @@
 [submodule "PIdP"]
 	path = PIdP
 	url = https://github.com/juliancoy/PIdP.git
+[submodule "org"]
+	path = org
+	url = https://github.com/juliancoy/org-backend.git
+[submodule "OrgPortal"]
+	path = OrgPortal
+	url = https://github.com/juliancoy/OrgPortal
+[submodule "CodeCollective"]
+	path = CodeCollective
+	url = https://github.com/juliancoy/CodeCollective

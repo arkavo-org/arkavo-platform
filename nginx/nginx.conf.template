@@ -33,12 +33,6 @@ stream {
         proxy_pass $__iroh_udp_9090;
     }
 
-    # SSH proxy for ccportal VM (use: ssh -p 2222 ubuntu@portal.<hostname>)
-    server {
-        listen 2222;
-        set $__ccportal_ssh "ccportal-vm.local:22";
-        proxy_pass $__ccportal_ssh;
-    }
 }
 
 http {
@@ -416,7 +410,7 @@ http {
 
         location / {
             set $NGINX_ORG_UPSTREAM "org";
-            proxy_pass http://$NGINX_ORG_UPSTREAM:8085;
+            proxy_pass http://$NGINX_ORG_UPSTREAM:8001;
 
             proxy_set_header Host $host;
             proxy_set_header X-Real-IP $remote_addr;
@@ -481,7 +475,30 @@ http {
             proxy_read_timeout 60s;
             proxy_send_timeout 60s;
 
-            # CORS headers
+        }
+    }
+
+    server {
+        listen 443 ssl;
+        http2 on;
+
+        server_name $ORG_DEV_BASE_URL;
+
+        ssl_certificate /keys/fullchain.pem;
+        ssl_certificate_key /keys/privkey.pem;
+
+        location / {
+            set $NGINX_ORG_UPSTREAM "org-dev";
+            proxy_pass http://$NGINX_ORG_UPSTREAM:8001;
+
+            proxy_set_header Host $host;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_next_upstream error timeout invalid_header http_500 http_502 http_503 http_504;
+            proxy_connect_timeout 5s;
+            proxy_read_timeout 60s;
+            proxy_send_timeout 60s;
+
             add_header 'Access-Control-Allow-Origin' '*' always;
             add_header 'Access-Control-Allow-Methods' 'GET, POST, PUT, DELETE, OPTIONS' always;
             add_header 'Access-Control-Allow-Headers' 'Authorization, Content-Type, Accept' always;
@@ -542,18 +559,97 @@ http {
         listen 443 ssl;
         http2 on;
 
-        server_name $CCPORTAL_BASE_URL ccportal-vm.local;
+        server_name $CCPORTAL_BASE_URL;
 
         ssl_certificate /keys/fullchain.pem;
         ssl_certificate_key /keys/privkey.pem;
 
-        location / {
-            set $NGINX_CCPORTAL_UPSTREAM "ccportal-vm.local";
-            proxy_pass https://$NGINX_CCPORTAL_UPSTREAM:443;
+        location ^~ /pidp/ {
+            rewrite ^/pidp/login/?$ / break;
+            rewrite ^/pidp/(.*)$ /$1 break;
+            proxy_pass http://pidp:8000;
 
-            # Use the same cert/key as inbound for client TLS to the upstream
-            proxy_ssl_certificate /keys/fullchain.pem;
-            proxy_ssl_certificate_key /keys/privkey.pem;
+            proxy_set_header Host $host;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $scheme;
+            proxy_next_upstream error timeout invalid_header http_500 http_502 http_503 http_504;
+            proxy_connect_timeout 5s;
+            proxy_read_timeout 60s;
+            proxy_send_timeout 60s;
+        }
+
+        location ^~ /pidp/assets/ {
+            rewrite ^/pidp/assets/(.*)$ /assets/$1 break;
+            proxy_pass http://pidp:8000;
+
+            proxy_set_header Host $host;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $scheme;
+            proxy_next_upstream error timeout invalid_header http_500 http_502 http_503 http_504;
+            proxy_connect_timeout 5s;
+            proxy_read_timeout 60s;
+            proxy_send_timeout 60s;
+        }
+
+        # PIdP UI uses root-relative paths; expose those routes on portal host.
+        location ^~ /assets/stable/ {
+            proxy_pass http://pidp:8000/assets/stable/;
+            proxy_set_header Host $host;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $scheme;
+        }
+
+        location ^~ /assets/dev/ {
+            proxy_pass http://pidp:8000/assets/dev/;
+            proxy_set_header Host $host;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $scheme;
+        }
+
+        location ^~ /auth/ {
+            proxy_pass http://pidp:8000/auth/;
+            proxy_set_header Host $host;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $scheme;
+        }
+
+        location ^~ /session/ {
+            proxy_pass http://pidp:8000/session/;
+            proxy_set_header Host $host;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $scheme;
+        }
+
+        location ^~ /frontend/ {
+            proxy_pass http://pidp:8000/frontend/;
+            proxy_set_header Host $host;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $scheme;
+        }
+
+        location ^~ /api/org/ {
+            rewrite ^/api/org/(.*)$ /$1 break;
+            proxy_pass http://org:8001;
+            proxy_set_header Host $host;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $scheme;
+            proxy_next_upstream error timeout invalid_header http_500 http_502 http_503 http_504;
+            proxy_connect_timeout 5s;
+            proxy_read_timeout 60s;
+            proxy_send_timeout 60s;
+        }
+
+        location / {
+            set $NGINX_CCPORTAL_UPSTREAM "portal";
+            proxy_pass http://$NGINX_CCPORTAL_UPSTREAM:8080;
 
             proxy_set_header Host $host;
             proxy_set_header X-Real-IP $remote_addr;
@@ -562,23 +658,115 @@ http {
             proxy_connect_timeout 5s;
             proxy_read_timeout 60s;
             proxy_send_timeout 60s;
+        }
+    }
 
-            # CORS headers
-            add_header 'Access-Control-Allow-Origin' '*' always;
-            add_header 'Access-Control-Allow-Methods' 'GET, POST, PUT, DELETE, OPTIONS' always;
-            add_header 'Access-Control-Allow-Headers' 'Authorization, Content-Type, Accept' always;
-            add_header 'Access-Control-Allow-Credentials' 'true' always;
+    server {
+        listen 443 ssl;
+        http2 on;
 
-            if ($request_method = OPTIONS ) {
-                add_header 'Access-Control-Max-Age' 1728000;
-                add_header 'Access-Control-Allow-Origin' '*';
-                add_header 'Access-Control-Allow-Methods' 'GET, POST, PUT, DELETE, OPTIONS';
-                add_header 'Access-Control-Allow-Headers' 'Authorization, Content-Type, Accept';
-                add_header 'Access-Control-Allow-Credentials' 'true';
-                add_header 'Content-Type' 'text/plain; charset=utf-8';
-                add_header 'Content-Length' 0;
-                return 204;
-            }
+        server_name $CCPORTAL_DEV_BASE_URL;
+
+        ssl_certificate /keys/fullchain.pem;
+        ssl_certificate_key /keys/privkey.pem;
+
+        location ^~ /pidp/ {
+            rewrite ^/pidp/login/?$ / break;
+            rewrite ^/pidp/(.*)$ /$1 break;
+            proxy_pass http://pidp-dev:8000;
+
+            proxy_set_header Host $host;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $scheme;
+            proxy_next_upstream error timeout invalid_header http_500 http_502 http_503 http_504;
+            proxy_connect_timeout 5s;
+            proxy_read_timeout 60s;
+            proxy_send_timeout 60s;
+        }
+
+        location ^~ /pidp/assets/ {
+            rewrite ^/pidp/assets/(.*)$ /assets/$1 break;
+            proxy_pass http://pidp-dev:8000;
+
+            proxy_set_header Host $host;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $scheme;
+            proxy_next_upstream error timeout invalid_header http_500 http_502 http_503 http_504;
+            proxy_connect_timeout 5s;
+            proxy_read_timeout 60s;
+            proxy_send_timeout 60s;
+        }
+
+        # PIdP UI uses root-relative paths; expose those routes on dev portal host.
+        location ^~ /assets/stable/ {
+            proxy_pass http://pidp-dev:8000/assets/stable/;
+            proxy_set_header Host $host;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $scheme;
+        }
+
+        location ^~ /assets/dev/ {
+            proxy_pass http://pidp-dev:8000/assets/dev/;
+            proxy_set_header Host $host;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $scheme;
+        }
+
+        location ^~ /auth/ {
+            proxy_pass http://pidp-dev:8000/auth/;
+            proxy_set_header Host $host;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $scheme;
+        }
+
+        location ^~ /session/ {
+            proxy_pass http://pidp-dev:8000/session/;
+            proxy_set_header Host $host;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $scheme;
+        }
+
+        location ^~ /frontend/ {
+            proxy_pass http://pidp-dev:8000/frontend/;
+            proxy_set_header Host $host;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $scheme;
+        }
+
+        location ^~ /api/org/ {
+            rewrite ^/api/org/(.*)$ /$1 break;
+            proxy_pass http://org-dev:8001;
+            proxy_set_header Host $host;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $scheme;
+            proxy_next_upstream error timeout invalid_header http_500 http_502 http_503 http_504;
+            proxy_connect_timeout 5s;
+            proxy_read_timeout 60s;
+            proxy_send_timeout 60s;
+        }
+
+        location / {
+            set $NGINX_CCPORTAL_UPSTREAM "portal-dev";
+            proxy_pass http://$NGINX_CCPORTAL_UPSTREAM:5173;
+
+            proxy_http_version 1.1;
+            proxy_set_header Upgrade $http_upgrade;
+            proxy_set_header Connection "upgrade";
+            proxy_set_header Host $host;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_next_upstream error timeout invalid_header http_500 http_502 http_503 http_504;
+            proxy_connect_timeout 5s;
+            proxy_read_timeout 60s;
+            proxy_send_timeout 60s;
         }
     }
 
@@ -604,22 +792,6 @@ http {
             proxy_read_timeout 60s;
             proxy_send_timeout 60s;
 
-            # CORS headers
-            add_header 'Access-Control-Allow-Origin' '*' always;
-            add_header 'Access-Control-Allow-Methods' 'GET, POST, PUT, DELETE, OPTIONS' always;
-            add_header 'Access-Control-Allow-Headers' 'Authorization, Content-Type, Accept' always;
-            add_header 'Access-Control-Allow-Credentials' 'true' always;
-
-            if ($request_method = OPTIONS ) {
-                add_header 'Access-Control-Max-Age' 1728000;
-                add_header 'Access-Control-Allow-Origin' '*';
-                add_header 'Access-Control-Allow-Methods' 'GET, POST, PUT, DELETE, OPTIONS';
-                add_header 'Access-Control-Allow-Headers' 'Authorization, Content-Type, Accept';
-                add_header 'Access-Control-Allow-Credentials' 'true';
-                add_header 'Content-Type' 'text/plain; charset=utf-8';
-                add_header 'Content-Length' 0;
-                return 204;
-            }
         }
     }
 
@@ -645,22 +817,6 @@ http {
             proxy_read_timeout 60s;
             proxy_send_timeout 60s;
 
-            # CORS headers
-            add_header 'Access-Control-Allow-Origin' '*' always;
-            add_header 'Access-Control-Allow-Methods' 'GET, POST, PUT, DELETE, OPTIONS' always;
-            add_header 'Access-Control-Allow-Headers' 'Authorization, Content-Type, Accept' always;
-            add_header 'Access-Control-Allow-Credentials' 'true' always;
-
-            if ($request_method = OPTIONS ) {
-                add_header 'Access-Control-Max-Age' 1728000;
-                add_header 'Access-Control-Allow-Origin' '*';
-                add_header 'Access-Control-Allow-Methods' 'GET, POST, PUT, DELETE, OPTIONS';
-                add_header 'Access-Control-Allow-Headers' 'Authorization, Content-Type, Accept';
-                add_header 'Access-Control-Allow-Credentials' 'true';
-                add_header 'Content-Type' 'text/plain; charset=utf-8';
-                add_header 'Content-Length' 0;
-                return 204;
-            }
         }
     }
 

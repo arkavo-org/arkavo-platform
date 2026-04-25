@@ -74,6 +74,7 @@ MODELS_TO_PULL = [
 KEYCLOAK_BASE_URL = "keycloak." + BACKEND_LOCATION
 OPENTDF_BASE_URL = "opentdf." + BACKEND_LOCATION
 ORG_BASE_URL = "org." + BACKEND_LOCATION
+ORG_DEV_BASE_URL = "dev.org." + BACKEND_LOCATION
 SYNAPSE_BASE_URL = "matrix." + BACKEND_LOCATION
 BLUESKY_BASE_URL = "bluesky." + BACKEND_LOCATION
 BSKY_FYP_BASE_URL = "bsky-fyp." + BACKEND_LOCATION
@@ -88,7 +89,11 @@ USERS_BASE_URL = "users." + BACKEND_LOCATION
 NEXTCLOUD_BASE_URL = "nextcloud." + BACKEND_LOCATION
 IROH_BASE_URL = "iroh." + BACKEND_LOCATION
 IROH_CONTAINER_NAME = "iroh_arkavo"
-CCPORTAL_BASE_URL = "portal." + BACKEND_LOCATION
+ORGPORTAL_BASE_URL = "portal." + BACKEND_LOCATION
+ORGPORTAL_DEV_BASE_URL = "dev.portal." + BACKEND_LOCATION
+# Backward-compatible aliases (deprecated).
+CCPORTAL_BASE_URL = ORGPORTAL_BASE_URL
+CCPORTAL_DEV_BASE_URL = ORGPORTAL_DEV_BASE_URL
 PIDP_BASE_URL = "pidp." + BACKEND_LOCATION
 PIDP_DEV_BASE_URL = "dev.pidp." + BACKEND_LOCATION
 
@@ -357,7 +362,6 @@ nginx = dict(
     ports={
         "80/tcp": 80,  # equivalent to -p 80:80
         "443/tcp": 443,  # equivalent to -p 443:443
-        "2222/tcp": 2222,  # SSH proxy to ccportal-vm
         "6667/tcp": 6667,
         "8443/tcp": 8443,
         "8448/tcp": 8448,
