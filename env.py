@@ -19,6 +19,9 @@ nginx_dir = os.path.join(current_dir, "nginx")
 webapp_dir = os.path.join(current_dir, "webapp")
 webapp_build_dir = os.path.join(current_dir, "webapp_build")
 webapp_android_dir = os.path.join(current_dir, "webapp_android")
+orgportal_web_dir = os.path.join(current_dir, "OrgPortal", "web")
+orgportal_build_dir = os.path.join(current_dir, "OrgPortal", "web_build")
+orgportal_android_dir = os.path.join(current_dir, "OrgPortal", "web_android")
 opentdf_websdk_dir = os.path.join(current_dir, "opentdf-websdk")
 worldchat_dir = os.path.join(current_dir, "users", "worldchat")
 levatel_dir = os.path.join(current_dir, "..", "CodeCollective")
@@ -37,6 +40,8 @@ os.makedirs(nextcloud_base_dir, exist_ok=True)
 os.makedirs(certs_dir, exist_ok=True)
 os.makedirs(webapp_build_dir, exist_ok=True)
 os.makedirs(webapp_android_dir, exist_ok=True)
+os.makedirs(orgportal_build_dir, exist_ok=True)
+os.makedirs(orgportal_android_dir, exist_ok=True)
 os.makedirs(iroh_dir, exist_ok=True)
 if "NEXTCLOUD_FQDN" not in globals():
     NEXTCLOUD_FQDN = "71.179.48.229"
@@ -457,6 +462,84 @@ webapp_android_build = dict(
     ),
 )
 
+orgportal_build = dict(
+    image="node:24",
+    detach=True,
+    name="orgportal_build",
+    network=NETWORK_NAME,
+    restart_policy={"Name": "no"},
+    volumes={
+        orgportal_web_dir: {"bind": "/usr/src/app", "mode": "rw"},
+        orgportal_build_dir: {"bind": "/usr/src/app/dist", "mode": "rw"},
+        orgportal_android_dir: {"bind": "/usr/src/app/android", "mode": "rw"},
+        os.path.join(orgportal_build_dir, "node_modules"): {
+            "bind": "/usr/src/app/node_modules",
+            "mode": "rw",
+        },
+    },
+    working_dir="/usr/src/app",
+    environment={
+        "NODE_ENV": "development",
+        "HOST_UID": str(uid),
+        "HOST_GID": str(gid),
+    },
+    command=(
+        "sh -c '"
+        "npm install && "
+        "npm run build && "
+        "if [ ! -d android ]; then npx cap add android; fi && "
+        "npx cap sync android && "
+        "chown -R ${HOST_UID}:${HOST_GID} /usr/src/app/android'"
+    ),
+)
+
+orgportal_android_build = dict(
+    image="ghcr.io/cirruslabs/android-sdk:34",
+    detach=True,
+    name="orgportal_android_build",
+    network=NETWORK_NAME,
+    restart_policy={"Name": "no"},
+    volumes={
+        orgportal_web_dir: {"bind": "/usr/src/app", "mode": "rw"},
+        orgportal_android_dir: {"bind": "/usr/src/app/android", "mode": "rw"},
+        os.path.join(orgportal_web_dir, ".gradle"): {"bind": "/root/.gradle", "mode": "rw"},
+        os.path.join(orgportal_android_dir, "node_modules"): {
+            "bind": "/usr/src/app/node_modules",
+            "mode": "rw",
+        },
+    },
+    working_dir="/usr/src/app/android",
+    command=(
+        "sh -c '"
+        "KEYSTORE_PROPS=/usr/src/app/android/keystore.properties && "
+        "if [ ! -f \"$KEYSTORE_PROPS\" ]; then "
+        "mkdir -p /usr/src/app/android/keystore && "
+        "STORE_PASS=$(od -An -N16 -tx1 /dev/urandom | tr -d \" \\n\") && "
+        "KEY_PASS=$STORE_PASS && "
+        "KEY_ALIAS=orgportal-release && "
+        "KEYSTORE_PATH=/usr/src/app/android/keystore/orgportal-release.jks && "
+        "keytool -genkeypair -v "
+        "-keystore \"$KEYSTORE_PATH\" "
+        "-alias \"$KEY_ALIAS\" "
+        "-keyalg RSA -keysize 2048 -validity 10000 "
+        "-storepass \"$STORE_PASS\" -keypass \"$KEY_PASS\" "
+        "-dname \"CN=OrgPortal, OU=Arkavo, O=Arkavo, L=Unknown, S=Unknown, C=US\" && "
+        "printf \"storeFile=%s\\nstorePassword=%s\\nkeyAlias=%s\\nkeyPassword=%s\\n\" "
+        "\"$KEYSTORE_PATH\" \"$STORE_PASS\" \"$KEY_ALIAS\" \"$KEY_PASS\" > \"$KEYSTORE_PROPS\" && "
+        "chmod 600 \"$KEYSTORE_PROPS\"; "
+        "fi && "
+        "./gradlew clean --no-daemon --no-parallel && "
+        "./gradlew assembleRelease --no-daemon --no-parallel && "
+        "./gradlew assembleDebug --no-daemon --no-parallel && "
+        "APK_PATH=app/build/outputs/apk/release/app-release.apk && "
+        "if [ ! -f \"$APK_PATH\" ]; then echo \"Missing APK at $APK_PATH\"; exit 1; fi && "
+        "DEBUG_APK_PATH=app/build/outputs/apk/debug/app-debug.apk && "
+        "if [ ! -f \"$DEBUG_APK_PATH\" ]; then echo \"Missing APK at $DEBUG_APK_PATH\"; exit 1; fi && "
+        "APKSIGNER=\"$ANDROID_SDK_ROOT/build-tools/$(ls $ANDROID_SDK_ROOT/build-tools | sort -V | tail -n1)/apksigner\" && "
+        "\"$APKSIGNER\" verify --verbose \"$APK_PATH\"'"
+    ),
+)
+
 webapp = dict(
     image="node:23",
     detach=True,  # Runs the container in detached mode
@@ -524,7 +607,7 @@ org = dict(
 )
 
 synapse = dict(
-    image="matrixdotorg/synapse:latest",
+    image="matrixdotorg/synapse@sha256:9d6bef0a269608d4422bbc5a39140f4a7f667802bcdac143eac0f41f80924dcf",
     detach=True,
     name="synapse",
     network=NETWORK_NAME,
@@ -541,6 +624,10 @@ synapse = dict(
         "interval": 5000000000,  # 5s
         "timeout": 5000000000,  # 5s
         "retries": 5,
+    },
+    # Ensure OIDC discovery for keycloak.<domain> resolves inside Docker networks.
+    extra_hosts={
+        f"keycloak.{BACKEND_LOCATION}": "host-gateway",
     },
 )
 

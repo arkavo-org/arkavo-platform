@@ -133,6 +133,35 @@ def ensure_network(network_name):
         print(f"Network {network_name} created.")
 
 
+def connect_container_to_network(container_name, network_name):
+    """Connect a container to an additional Docker network if needed."""
+    try:
+        network = DOCKER_CLIENT.networks.get(network_name)
+        container = DOCKER_CLIENT.containers.get(container_name)
+    except Exception as exc:
+        print(
+            f"Could not connect container '{container_name}' to network '{network_name}': {exc}"
+        )
+        return False
+
+    current_networks = container.attrs.get("NetworkSettings", {}).get("Networks", {})
+    if network_name in current_networks:
+        print(f"Container {container_name} is already connected to network {network_name}")
+        return True
+
+    try:
+        network.connect(container)
+        print(f"Connected container {container_name} to network {network_name}")
+        return True
+    except APIError as exc:
+        # If another process connected it first, continue without failing.
+        if "already exists" in str(exc).lower():
+            print(f"Container {container_name} is already connected to network {network_name}")
+            return True
+        print(f"Failed to connect container {container_name} to network {network_name}: {exc}")
+        return False
+
+
 def debug_container(config):
     print(f'\033[4;32mDebugging container {config["name"]}\033[0m')
     container_name = config["name"]

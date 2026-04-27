@@ -210,6 +210,11 @@ if "webapp_build" in env.SERVICES_TO_RUN:
     if "webapp_android_build" in env.SERVICES_TO_RUN:
         utils_docker.run_container(env.webapp_android_build)
 
+if "orgportal_build" in env.SERVICES_TO_RUN:
+    utils_docker.run_container(env.orgportal_build)
+    if "orgportal_android_build" in env.SERVICES_TO_RUN:
+        utils_docker.run_container(env.orgportal_android_build)
+
 if "nextcloud" in env.SERVICES_TO_RUN:
     print("Running Nextcloud stack")
     utils_docker.run_container(env.nextcloud_db)
@@ -232,10 +237,11 @@ if "org" in env.SERVICES_TO_RUN:
             org_env["ORG_PROD_PUBLIC_BASE_URL"] = f"https://{org_base_url}/"
         if org_dev_base_url:
             org_env["ORG_DEV_PUBLIC_BASE_URL"] = f"https://{org_dev_base_url}/"
-        pidp_dev_base_url = getattr(env, "PIDP_DEV_BASE_URL", "")
-        if pidp_dev_base_url:
-            org_env["ORG_PIDP_BASE_URL"] = f"https://{pidp_dev_base_url}"
-            org_env["ORG_PIDP_JWKS_URL"] = f"https://{pidp_dev_base_url}/.well-known/jwks.json"
+        # Do not force Org->PIdP calls through public HTTPS hostnames.
+        # org/run.py already defaults to in-network service discovery
+        # (http://pidp-dev:8000) which is more reliable in Docker.
+        # Keep any explicit operator-provided ORG_PIDP_* overrides intact
+        # via the inherited environment.
         org_prod_image = getattr(env, "ORG_PROD_IMAGE", "")
         if org_prod_image:
             org_env["ORG_PROD_IMAGE"] = org_prod_image
@@ -345,12 +351,16 @@ if "iroh" in env.SERVICES_TO_RUN:
 # --- MINIO ---
 if "minio" in env.SERVICES_TO_RUN:
     utils_docker.run_container(env.minio)
+    if getattr(env, "NETWORK_NAME", None):
+        utils_docker.connect_container_to_network(env.minio["name"], env.NETWORK_NAME)
 
 # --- PIdP ---
 if "pidp" in env.SERVICES_TO_RUN:
     print("Running PIdP stack")
     if hasattr(env, "minio"):
         utils_docker.run_container(env.minio)
+        if getattr(env, "NETWORK_NAME", None):
+            utils_docker.connect_container_to_network(env.minio["name"], env.NETWORK_NAME)
     pidp_run_path = os.path.join(here, "PIdP", "run.py")
     if os.path.isfile(pidp_run_path):
         pidp_env = os.environ.copy()

@@ -570,6 +570,7 @@ http {
             proxy_pass http://pidp:8000;
 
             proxy_set_header Host $host;
+            proxy_set_header X-Forwarded-Host $host;
             proxy_set_header X-Real-IP $remote_addr;
             proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
             proxy_set_header X-Forwarded-Proto $scheme;
@@ -584,6 +585,7 @@ http {
             proxy_pass http://pidp:8000;
 
             proxy_set_header Host $host;
+            proxy_set_header X-Forwarded-Host $host;
             proxy_set_header X-Real-IP $remote_addr;
             proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
             proxy_set_header X-Forwarded-Proto $scheme;
@@ -597,6 +599,7 @@ http {
         location ^~ /assets/stable/ {
             proxy_pass http://pidp:8000/assets/stable/;
             proxy_set_header Host $host;
+            proxy_set_header X-Forwarded-Host $host;
             proxy_set_header X-Real-IP $remote_addr;
             proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
             proxy_set_header X-Forwarded-Proto $scheme;
@@ -605,6 +608,7 @@ http {
         location ^~ /assets/dev/ {
             proxy_pass http://pidp:8000/assets/dev/;
             proxy_set_header Host $host;
+            proxy_set_header X-Forwarded-Host $host;
             proxy_set_header X-Real-IP $remote_addr;
             proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
             proxy_set_header X-Forwarded-Proto $scheme;
@@ -613,6 +617,7 @@ http {
         location ^~ /auth/ {
             proxy_pass http://pidp:8000/auth/;
             proxy_set_header Host $host;
+            proxy_set_header X-Forwarded-Host $host;
             proxy_set_header X-Real-IP $remote_addr;
             proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
             proxy_set_header X-Forwarded-Proto $scheme;
@@ -621,6 +626,7 @@ http {
         location ^~ /session/ {
             proxy_pass http://pidp:8000/session/;
             proxy_set_header Host $host;
+            proxy_set_header X-Forwarded-Host $host;
             proxy_set_header X-Real-IP $remote_addr;
             proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
             proxy_set_header X-Forwarded-Proto $scheme;
@@ -629,14 +635,14 @@ http {
         location ^~ /frontend/ {
             proxy_pass http://pidp:8000/frontend/;
             proxy_set_header Host $host;
+            proxy_set_header X-Forwarded-Host $host;
             proxy_set_header X-Real-IP $remote_addr;
             proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
             proxy_set_header X-Forwarded-Proto $scheme;
         }
 
         location ^~ /api/org/ {
-            rewrite ^/api/org/(.*)$ /$1 break;
-            proxy_pass http://org:8001;
+            proxy_pass http://org:8001/;
             proxy_set_header Host $host;
             proxy_set_header X-Real-IP $remote_addr;
             proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
@@ -676,6 +682,7 @@ http {
             proxy_pass http://pidp-dev:8000;
 
             proxy_set_header Host $host;
+            proxy_set_header X-Forwarded-Host $host;
             proxy_set_header X-Real-IP $remote_addr;
             proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
             proxy_set_header X-Forwarded-Proto $scheme;
@@ -690,6 +697,7 @@ http {
             proxy_pass http://pidp-dev:8000;
 
             proxy_set_header Host $host;
+            proxy_set_header X-Forwarded-Host $host;
             proxy_set_header X-Real-IP $remote_addr;
             proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
             proxy_set_header X-Forwarded-Proto $scheme;
@@ -703,6 +711,7 @@ http {
         location ^~ /assets/stable/ {
             proxy_pass http://pidp-dev:8000/assets/stable/;
             proxy_set_header Host $host;
+            proxy_set_header X-Forwarded-Host $host;
             proxy_set_header X-Real-IP $remote_addr;
             proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
             proxy_set_header X-Forwarded-Proto $scheme;
@@ -711,6 +720,7 @@ http {
         location ^~ /assets/dev/ {
             proxy_pass http://pidp-dev:8000/assets/dev/;
             proxy_set_header Host $host;
+            proxy_set_header X-Forwarded-Host $host;
             proxy_set_header X-Real-IP $remote_addr;
             proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
             proxy_set_header X-Forwarded-Proto $scheme;
@@ -719,6 +729,7 @@ http {
         location ^~ /auth/ {
             proxy_pass http://pidp-dev:8000/auth/;
             proxy_set_header Host $host;
+            proxy_set_header X-Forwarded-Host $host;
             proxy_set_header X-Real-IP $remote_addr;
             proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
             proxy_set_header X-Forwarded-Proto $scheme;
@@ -727,6 +738,7 @@ http {
         location ^~ /session/ {
             proxy_pass http://pidp-dev:8000/session/;
             proxy_set_header Host $host;
+            proxy_set_header X-Forwarded-Host $host;
             proxy_set_header X-Real-IP $remote_addr;
             proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
             proxy_set_header X-Forwarded-Proto $scheme;
@@ -735,14 +747,14 @@ http {
         location ^~ /frontend/ {
             proxy_pass http://pidp-dev:8000/frontend/;
             proxy_set_header Host $host;
+            proxy_set_header X-Forwarded-Host $host;
             proxy_set_header X-Real-IP $remote_addr;
             proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
             proxy_set_header X-Forwarded-Proto $scheme;
         }
 
         location ^~ /api/org/ {
-            rewrite ^/api/org/(.*)$ /$1 break;
-            proxy_pass http://org-dev:8001;
+            proxy_pass http://org-dev:8001/;
             proxy_set_header Host $host;
             proxy_set_header X-Real-IP $remote_addr;
             proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
@@ -780,10 +792,10 @@ http {
         ssl_certificate_key /keys/privkey.pem;
 
         location / {
-            set $NGINX_PIDP_UPSTREAM "pidp";
-            proxy_pass http://$NGINX_PIDP_UPSTREAM:8000;
+            proxy_pass http://pidp:8000;
 
             proxy_set_header Host $host;
+            proxy_set_header X-Forwarded-Host $host;
             proxy_set_header X-Real-IP $remote_addr;
             proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
             proxy_set_header X-Forwarded-Proto $scheme;
@@ -805,10 +817,10 @@ http {
         ssl_certificate_key /keys/privkey.pem;
 
         location / {
-            set $NGINX_PIDP_UPSTREAM "pidp-dev";
-            proxy_pass http://$NGINX_PIDP_UPSTREAM:8000;
+            proxy_pass http://pidp-dev:8000;
 
             proxy_set_header Host $host;
+            proxy_set_header X-Forwarded-Host $host;
             proxy_set_header X-Real-IP $remote_addr;
             proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
             proxy_set_header X-Forwarded-Proto $scheme;

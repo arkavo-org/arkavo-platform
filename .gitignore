@@ -266,3 +266,4 @@ data
 webapp_android
 webapp_build
 .env*
+.gitleaks*
