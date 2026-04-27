@@ -560,6 +560,7 @@ http {
         http2 on;
 
         server_name $CCPORTAL_BASE_URL;
+        client_max_body_size 25M;
 
         ssl_certificate /keys/fullchain.pem;
         ssl_certificate_key /keys/privkey.pem;
@@ -672,6 +673,7 @@ http {
         http2 on;
 
         server_name $CCPORTAL_DEV_BASE_URL;
+        client_max_body_size 25M;
 
         ssl_certificate /keys/fullchain.pem;
         ssl_certificate_key /keys/privkey.pem;
