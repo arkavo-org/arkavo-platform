@@ -1,5 +1,5 @@
 // src/authConfig.ts
-import { UserManager, WebStorageStateStore } from 'oidc-client';
+import { UserManager, WebStorageStateStore } from 'oidc-client-ts';
 
 const authConfig = {
     authority: 'https://auth.pingone.com/YOUR_PING_IDENTITY_DOMAIN', // Replace with your Ping Identity domain

@@ -144,7 +144,6 @@ backend/keycloak/admin_scripts/keycloak-24.0.5.zip
 .env.public
 *.zip
 .env.public
-package-lock.json
 *.lock
 keys
 env.py
