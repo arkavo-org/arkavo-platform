@@ -11,14 +11,18 @@ Covered today:
 - Public web traffic is intended to terminate through nginx over HTTPS/TLS.
 - CockroachDB is running in secure mode for the OrgPortal/org/UBI/wages path, using TLS client certificates.
 - User passwords are hashed rather than stored as plaintext.
+- PIdP `identity_data` now supports transparent application-level JSON encryption when `PII_ENCRYPTION_KEYS` is configured.
+- PIdP startup fails closed in production, or when `REQUIRE_PII_ENCRYPTION=true`, if `PII_ENCRYPTION_KEYS` is missing.
+- PIdP avatar/object writes request S3 server-side encryption by default.
+- Org business-card S3 writes request server-side encryption by default.
 
 Not fully covered today:
 
 - PIdP still appears to use its own Postgres path rather than the secure CockroachDB path.
 - Internal service-to-service traffic commonly uses plain HTTP on the Docker network.
-- Sensitive PII appears to be stored as normal database fields or JSON values without application-level field encryption.
 - There is no repository evidence that CockroachDB, Postgres, MinIO, or Docker volumes are encrypted at rest.
-- Uploaded artifacts and object storage content are not proven to be encrypted at rest.
+- Existing plaintext PIdP `identity_data` rows remain plaintext until migrated or rewritten.
+- Object storage server-side encryption still depends on the backing S3/MinIO server being configured to honor the requested algorithm.
 - Some generated private keys may be serialized without passphrase encryption depending on deployment path.
 
 ## Data Classes
@@ -71,9 +75,9 @@ Best-practice target:
 
 ### Object Storage Transport
 
-MinIO/S3-style object storage may be used over internal HTTP depending on configuration. If PII-bearing uploads are stored or retrieved there, this does not satisfy strict encryption-in-transit requirements.
+MinIO/S3-style object storage now defaults client configuration to SSL where supported. If an explicit `http://` endpoint is configured, traffic may still be internal HTTP. If PII-bearing uploads are stored or retrieved over HTTP, this does not satisfy strict encryption-in-transit requirements.
 
-Status: not proven.
+Status: partially satisfied by defaults, not fully proven.
 
 Best-practice target:
 
@@ -107,13 +111,13 @@ Best-practice target:
 
 ### PII Fields
 
-PII and identity data appear to be stored as normal database columns or JSON fields. Database or disk encryption is useful, but it does not protect PII from application bugs, overbroad database access, SQL injection, accidental exports, or compromised database credentials.
+PIdP `identity_data` uses transparent encrypted JSONB storage when `PII_ENCRYPTION_KEYS` is configured. New writes are stored as encrypted JSON wrappers while the application continues to receive normal dictionaries. Existing plaintext rows remain readable for compatibility and must be migrated or rewritten to become encrypted.
 
-Status: not satisfied for high-sensitivity PII.
+Status: partially satisfied for PIdP `identity_data`; not yet complete for every high-sensitivity PII field or existing plaintext row.
 
 Best-practice target:
 
-- Add field-level envelope encryption for high-sensitivity PII.
+- Complete field-level envelope encryption for all high-sensitivity PII.
 - Encrypt identity JSON, biometric or iris-related values, addresses, sensitive profile attributes, document metadata, and OCR outputs.
 - Store only deterministic blind indexes for fields that need lookup.
 - Keep encryption keys outside the database.
@@ -123,7 +127,9 @@ Best-practice target:
 
 Uploaded artifacts, profile assets, business cards, and document-like content may contain PII. There is no current evidence that these objects are encrypted at rest beyond any host-level storage controls.
 
-Status: not proven.
+PIdP avatar writes and org business-card S3 writes request `ServerSideEncryption=AES256` by default. This is an application-level request to the object store; compliance still requires confirming MinIO/S3 accepts, enforces, and persists encrypted objects.
+
+Status: partially satisfied by client-side request, not fully proven at storage layer.
 
 Best-practice target:
 
@@ -183,15 +189,16 @@ To satisfy a strict encryption-at-rest and encryption-in-transit requirement, th
 
 ## Recommended Implementation Plan
 
-1. Move PIdP account and identity data onto the secure CockroachDB instance, or enable TLS and encrypted storage for its Postgres instance.
-2. Enable encrypted host, cloud, or database volumes for CockroachDB, Postgres, MinIO, and backups.
-3. Add field-level envelope encryption for sensitive PIdP identity data and any biometric or iris-related fields.
-4. Enable server-side or client-side encryption for MinIO/S3 artifacts.
-5. Add TLS or mTLS for internal PII-bearing service traffic.
-6. Store JWT signing keys, TLS keys, database credentials, and API tokens through a runtime secret mechanism rather than repository files.
-7. Extend `.gitignore` rules to reject certificates, keys, dumps, generated artifacts, and local runtime state.
-8. Add an automated secret scan and artifact scan to CI.
-9. Create a control matrix that maps each PII data store and transport path to the exact encryption mechanism used.
+1. Migrate or rewrite existing plaintext PIdP `identity_data` rows so they are stored through the encrypted JSONB type.
+2. Move PIdP account and identity data onto the secure CockroachDB instance, or enable TLS and encrypted storage for its Postgres instance.
+3. Enable encrypted host, cloud, or database volumes for CockroachDB, Postgres, MinIO, and backups.
+4. Confirm MinIO/S3 server-side encryption is enforced and cannot be bypassed by clients.
+5. Extend field-level encryption to any additional high-sensitivity PII outside PIdP `identity_data`, especially biometric, document, and OCR-derived values.
+6. Add TLS or mTLS for internal PII-bearing service traffic.
+7. Store JWT signing keys, TLS keys, database credentials, and API tokens through a runtime secret mechanism rather than repository files.
+8. Extend `.gitignore` rules to reject certificates, keys, dumps, generated artifacts, and local runtime state.
+9. Add an automated secret scan and artifact scan to CI.
+10. Create a control matrix that maps each PII data store and transport path to the exact encryption mechanism used.
 
 ## Compliance Position
 
@@ -199,4 +206,4 @@ Until the missing controls are implemented and documented, the platform should b
 
 > Public TLS and secure CockroachDB transport are partially implemented. Full encryption at rest and complete encryption in transit for all PII are not yet proven.
 
-The platform should not be represented as fully satisfying encryption-at-rest and encryption-in-transit requirements for PII until storage encryption, internal transport encryption, object encryption, and field-level protection for high-sensitivity identity data are completed or explicitly accepted as risk exceptions.
+The platform should not be represented as fully satisfying encryption-at-rest and encryption-in-transit requirements for PII until storage encryption, internal transport encryption, existing-row migration, object-store enforcement, and field-level protection for all high-sensitivity identity data are completed or explicitly accepted as risk exceptions.
