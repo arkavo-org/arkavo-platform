@@ -63,3 +63,73 @@
 - [ ] Establish a single command for full local CI (lint + unit + integration tests).
 - [ ] Add CI gate for new integration tests (attendance + email + chat adapter).
 - [ ] Remove/retire remaining legacy implementations after replacement parity is verified.
+
+## OrgPortal Playwright Docker + Mobile UI Handoff (2026-05-01)
+
+### Completed Today
+
+- [x] Added Playwright config for desktop + mobile runs:
+  - `OrgPortal/web/playwright.config.ts`
+- [x] Added initial responsive E2E suite:
+  - `OrgPortal/web/tests/e2e/layout-smoke.spec.ts`
+  - Covers:
+    - Profile dropdown viewport bounds check
+    - Horizontal overflow check on key routes (`/`, `/events`, `/orgs`, `/people`)
+- [x] Added Dockerized Playwright runner:
+  - `OrgPortal/web/docker/playwright/Dockerfile`
+  - `OrgPortal/web/docker/playwright/docker-compose.yml`
+- [x] Added npm scripts:
+  - `test:e2e`
+  - `test:e2e:headed`
+  - `test:e2e:report`
+  - `test:e2e:docker`
+- [x] Patched likely mobile profile menu offscreen root cause:
+  - `OrgPortal/web/src/index.css`
+  - Added mobile rule at `@media (max-width: 680px)` to anchor `.portal-user-menu` left and cap width to viewport.
+- [x] Updated docs in `OrgPortal/web/README.md` with E2E + Docker test commands.
+
+### Remaining Work
+
+- [ ] Finish interrupted Docker test run and capture pass/fail results after latest image/tooling changes.
+- [ ] If any E2E failures remain, fix UI/layout regressions and re-run until green.
+- [ ] Expand UI pitfall coverage beyond current checks:
+  - sticky header overlap issues
+  - nav wrapping/clickability on narrow widths
+  - modal/overlay clipping
+  - z-index conflicts (search/menu/modal)
+  - keyboard navigation + focus trapping for dropdowns/modals
+- [ ] Optional: add Selenium parity runner in Docker (if dual-framework coverage is still desired).
+
+### Important Context / Gotchas
+
+- Local `npm/node` is unavailable on host shell; use Docker-based commands.
+- Playwright package resolved to `1.59.1`; Docker base image was updated to `mcr.microsoft.com/playwright:v1.59.1-jammy`.
+- Mobile project explicitly set to Chromium in Playwright config (`browserName: 'chromium'`) to avoid unintended WebKit requirement.
+
+### Resume Commands (from repo root)
+
+1. Re-run the Playwright Docker suite:
+   ```bash
+   docker compose -f /home/julian/Documents/arkavo-platform/OrgPortal/web/docker/playwright/docker-compose.yml up --build --abort-on-container-exit --exit-code-from orgportal-playwright
+   ```
+
+2. If you prefer npm script wrapper (requires npm available in shell):
+   ```bash
+   cd /home/julian/Documents/arkavo-platform/OrgPortal/web
+   npm run test:e2e:docker
+   ```
+
+3. Inspect generated artifacts after run:
+   - `OrgPortal/web/playwright-report/`
+   - `OrgPortal/web/test-results/`
+
+### Files Changed Today
+
+- `OrgPortal/web/package.json`
+- `OrgPortal/web/package-lock.json`
+- `OrgPortal/web/src/index.css`
+- `OrgPortal/web/README.md`
+- `OrgPortal/web/playwright.config.ts`
+- `OrgPortal/web/tests/e2e/layout-smoke.spec.ts`
+- `OrgPortal/web/docker/playwright/Dockerfile`
+- `OrgPortal/web/docker/playwright/docker-compose.yml`
