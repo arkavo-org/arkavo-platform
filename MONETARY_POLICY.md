@@ -290,9 +290,21 @@ The code already contains the backbone of the monetary system, but these gaps re
 
 - Iris identity is not implemented.
 - Irisless identity fallback is not implemented.
-- Human needs are not yet first-class budget categories.
-- State departments are not yet first-class budget categories.
+- Human needs are not yet first-class budget categories, programs, entitlements, supplier relationships, eligibility rules, or fulfillment records.
+- State departments are not yet first-class budget categories or account-owning entities.
+- Department budgets are not explicit for Military, Law Enforcement, Faith, Communications, Culture, Housing, and Energy.
+- A personnel registry is missing. There is no dedicated employment model tying people to departments, jobs, wage schedules, supervisors, and public-service roles.
 - Wage schedule administration is database/API level only; Portal UI integration is not implemented.
+- Wage schedule approval, pause/resume, audit, and change-history workflows are not implemented.
+- Government treasury accounts are not formalized as a hierarchy of central treasury, department accounts, program accounts, reserves, and appropriations.
+- Budget disbursement is not implemented as ledger movement from treasury or issuance accounts into department and program accounts.
+- Tax collection does not yet credit a specific treasury, department, or revenue account.
+- Monetary issuance rules are not formalized beyond implemented UBI and wage workers. Missing policy controls include caps, targets, reserve rules, scheduled liabilities, and issuance limits.
+- Fair taxation requires policy review beyond the current progressive default, including democratic tax schedule changes, exemptions, refunds, enforcement, and audit trails.
 - Insurance claims have schema support, but full claim approval and payout workflows need completion.
-- Fair taxation requires policy review beyond the current progressive default.
+- Insurance reserves, fraud review, appeals, and claim payout ledger routing are not implemented.
+- Stock market settlement is incomplete. Missing aspects include order book depth, counterparties, settlement transactions, dividends, corporate actions, listing governance, and market surveillance.
+- Money-supply governance is limited to history reporting. Missing aspects include issuance-by-source dashboards, sink analysis, policy simulations, scheduled-liability reporting, and alerts.
+- Program-level grants are not modeled. `GRANT` exists as a transaction type, but grant programs, applications, approvals, milestones, reporting, and clawbacks are not implemented.
+- Strong monetary audit controls are incomplete. Missing aspects include immutable policy events, multi-party approvals, separation of duties, reconciliation reports, and administrative action review.
 - Direct government department accounts and budget disbursement rules need to be formalized.
