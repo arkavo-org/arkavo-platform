@@ -1118,6 +1118,7 @@ coturn = dict(
     network=NETWORK_NAME,
     restart_policy={"Name": "unless-stopped"},
     detach=True,
+    user="0:0",
     volumes={
         os.path.join(coturn_dir, "turnserver.conf"): {
             "bind": "/etc/coturn/turnserver.conf",
