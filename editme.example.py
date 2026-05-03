@@ -25,7 +25,9 @@ SERVICES_TO_RUN = [
     "element",     # Social Media - Matrix Client
     "webapp",      # Social Media - Our Client
     "webapp_build",# Social Media - Our Client Production Build
-    "users"
+    "users",
+    # "coturn",    # STUN/TURN relay for P2P connectivity
+    # "signaling", # WebRTC signaling server for P2P session negotiation
 ]
 
 distinguisher = ""  # If you are running multiple deployments on the same machine, you can distinguish them here

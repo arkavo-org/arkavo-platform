@@ -1,0 +1,14 @@
+{
+  "name": "arkavo-signaling",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "WebRTC signaling server for Arkavo P2P sessions",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "ws": "^8.18.0"
+  }
+}

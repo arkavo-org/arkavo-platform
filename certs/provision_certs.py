@@ -97,6 +97,24 @@ def build_domains(
     return ordered
 
 
+def log_realtime_domain_coverage(domains: Sequence[str], backend_location: str) -> None:
+    """Log coverage for realtime hostnames required by TURN/signaling routing."""
+    expected = {
+        f"turn.{backend_location}".strip(),
+        f"signaling.{backend_location}".strip(),
+    }
+    found = set(domains)
+    missing = sorted(name for name in expected if name and name not in found)
+    if missing:
+        LOG.warning(
+            "Realtime domains missing from requested certificate SANs: %s. "
+            "Use --extra-domain or verify env.py subdomain discovery.",
+            ", ".join(missing),
+        )
+    else:
+        LOG.info("Realtime domains included in certificate SANs: %s", ", ".join(sorted(expected)))
+
+
 def supports_nginx_plugin(certbot_bin: str) -> bool:
     """Return True if the installed Certbot exposes the nginx authenticator."""
     try:
@@ -624,6 +642,7 @@ def main() -> None:
         include_wildcard=args.dns_wildcard,
         extra_domains=args.extra_domain,
     )
+    log_realtime_domain_coverage(domains, BACKEND_LOCATION)
 
     certbot_bin = shutil.which(args.certbot_bin) or args.certbot_bin
     resolved_docker_bin = shutil.which(args.docker_bin) or args.docker_bin

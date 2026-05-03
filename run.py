@@ -348,6 +348,15 @@ if "users" in env.SERVICES_TO_RUN:
 if "iroh" in env.SERVICES_TO_RUN:
     utils_docker.run_container(env.iroh)
 
+# --- WEBRTC SIGNALING + TURN/STUN ---
+if "coturn" in env.SERVICES_TO_RUN:
+    utils_docker.run_container(env.coturn)
+
+if "signaling" in env.SERVICES_TO_RUN:
+    if "coturn" in env.SERVICES_TO_RUN:
+        utils_docker.wait_for_port("coturn", 3478, network=env.NETWORK_NAME)
+    utils_docker.run_container(env.signaling)
+
 # --- MINIO ---
 if "minio" in env.SERVICES_TO_RUN:
     utils_docker.run_container(env.minio)

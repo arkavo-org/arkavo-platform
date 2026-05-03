@@ -33,6 +33,8 @@ synapse_dir = os.path.join(current_dir, "synapse")
 bsky_bridge_dir = os.path.join(current_dir, "bsky-bridge")
 gitea_dir = os.path.join(current_dir, "gitea")
 iroh_dir = os.path.join(current_dir, "iroh")
+signaling_dir = os.path.join(current_dir, "signaling")
+coturn_dir = os.path.join(current_dir, "coturn")
 
 # Nextcloud data directory setup
 os.makedirs(nextcloud_data_root, exist_ok=True)
@@ -43,6 +45,8 @@ os.makedirs(webapp_android_dir, exist_ok=True)
 os.makedirs(orgportal_build_dir, exist_ok=True)
 os.makedirs(orgportal_android_dir, exist_ok=True)
 os.makedirs(iroh_dir, exist_ok=True)
+os.makedirs(signaling_dir, exist_ok=True)
+os.makedirs(coturn_dir, exist_ok=True)
 if "NEXTCLOUD_FQDN" not in globals():
     NEXTCLOUD_FQDN = "71.179.48.229"
 # Check to see if we're in an EC2 instance
@@ -93,6 +97,8 @@ STATIC_BASE_URL = "static." + BACKEND_LOCATION
 USERS_BASE_URL = "users." + BACKEND_LOCATION
 NEXTCLOUD_BASE_URL = "nextcloud." + BACKEND_LOCATION
 IROH_BASE_URL = "iroh." + BACKEND_LOCATION
+SIGNALING_BASE_URL = "signaling." + BACKEND_LOCATION
+TURN_BASE_URL = "turn." + BACKEND_LOCATION
 IROH_CONTAINER_NAME = "iroh_arkavo"
 ORGPORTAL_BASE_URL = "portal." + BACKEND_LOCATION
 ORGPORTAL_DEV_BASE_URL = "dev.portal." + BACKEND_LOCATION
@@ -1083,6 +1089,71 @@ iroh = dict(
     },
     # Bind RPC on 0.0.0.0:9090 so nginx on the same Docker network can reach it.
     command=["--rpc-addr", "0.0.0.0:9090", "start"],
+)
+
+signaling = dict(
+    image="node:24-alpine",
+    name="signaling",
+    network=NETWORK_NAME,
+    restart_policy={"Name": "unless-stopped"},
+    detach=True,
+    working_dir="/app",
+    volumes={
+        signaling_dir: {"bind": "/app", "mode": "rw"},
+    },
+    environment={
+        "PORT": "3000",
+        "ALLOWED_ORIGINS": f"https://{USER_WEBSITE},https://{ORGPORTAL_BASE_URL},https://{ORGPORTAL_DEV_BASE_URL}",
+        "TURN_URLS": f"turns:{TURN_BASE_URL}:443?transport=tcp",
+        "TURN_USERNAME": "arkavo",
+        "TURN_CREDENTIAL": "changeme-turn-password",
+        "STUN_URLS": "stun:stun.l.google.com:19302",
+    },
+    command=["sh", "-lc", "npm install --no-fund --no-audit && node server.js"],
+)
+
+coturn = dict(
+    image="coturn/coturn:4.6.3-r2",
+    name="coturn",
+    network=NETWORK_NAME,
+    restart_policy={"Name": "unless-stopped"},
+    detach=True,
+    volumes={
+        os.path.join(coturn_dir, "turnserver.conf"): {
+            "bind": "/etc/coturn/turnserver.conf",
+            "mode": "ro",
+        },
+        CERT_FULLCHAIN_PATH: {
+            "bind": "/etc/coturn/certs/fullchain.pem",
+            "mode": "ro",
+        },
+        CERT_PRIVKEY_PATH: {
+            "bind": "/etc/coturn/certs/privkey.pem",
+            "mode": "ro",
+        },
+        os.path.join(coturn_dir, "data"): {
+            "bind": "/var/lib/coturn",
+            "mode": "rw",
+        },
+    },
+    environment={
+        "TURN_REALM": TURN_BASE_URL,
+        "TURN_USER": "arkavo:changeme-turn-password",
+    },
+    command=[
+        "-c",
+        "/etc/coturn/turnserver.conf",
+        "--realm",
+        TURN_BASE_URL,
+        "--user",
+        "arkavo:changeme-turn-password",
+        "--cert",
+        "/etc/coturn/certs/fullchain.pem",
+        "--pkey",
+        "/etc/coturn/certs/privkey.pem",
+        "--no-udp",
+        "--no-dtls",
+    ],
 )
 
 # Nextcloud stack --------------------------------------------------
