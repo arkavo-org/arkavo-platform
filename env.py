@@ -27,6 +27,7 @@ worldchat_dir = os.path.join(current_dir, "users", "worldchat")
 levatel_dir = os.path.join(current_dir, "..", "CodeCollective")
 org_dir = os.path.join(current_dir, "org")
 static_dir = os.path.join(current_dir, "static")
+tentb_static_dir = "/media/julian/arkavodrive/tentbstatic"
 certs_dir = os.path.join(current_dir, "certs")
 keys_dir = os.path.join(certs_dir, "keys")
 synapse_dir = os.path.join(current_dir, "synapse")
@@ -353,6 +354,10 @@ nginx = dict(
         static_dir: {
             "bind": "/static",
             "mode": "rw",
+        },
+        tentb_static_dir: {
+            "bind": "/tentbstatic",
+            "mode": "ro",
         },
         levatel_dir: {
             "bind": "/cc",

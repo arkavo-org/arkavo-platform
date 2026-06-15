@@ -115,6 +115,12 @@ http {
     }
 
     server {
+        listen 80;
+        server_name $STATIC_BASE_URL;
+        return 301 https://$host$request_uri;
+    }
+
+    server {
         listen 4443 ssl;
         http2 on;
         server_name $USER_WEBSITE;
@@ -198,6 +204,29 @@ http {
 
         ssl_certificate /keys/fullchain.pem;
         ssl_certificate_key /keys/privkey.pem;
+
+        location = /tentb {
+            return 301 /tentb/;
+        }
+
+        location ^~ /tentb/ {
+            alias /tentbstatic/;
+            autoindex on;
+            try_files $uri $uri/ =404;
+
+            set $cors_origin "";
+            if ($http_origin ~* "^https://(dev\\.portal\\.arkavo\\.org|portal\\.arkavo\\.org|jsynth\\.us)$") {
+                set $cors_origin $http_origin;
+            }
+            add_header Access-Control-Allow-Origin $cors_origin always;
+            add_header Access-Control-Allow-Methods "GET, OPTIONS" always;
+            add_header Access-Control-Allow-Headers "Content-Type" always;
+            add_header Vary "Origin" always;
+
+            if ($request_method = OPTIONS) {
+                return 204;
+            }
+        }
 
         location / {
             root /static;

@@ -1,0 +1,58 @@
+name: OrgPortal Self-Hosted Build
+
+on:
+  workflow_call:
+    inputs:
+      app_path:
+        description: "Path to the OrgPortal web app"
+        required: false
+        default: "OrgPortal/web"
+        type: string
+      node_image:
+        description: "Node Docker image to use"
+        required: false
+        default: "node:24-alpine"
+        type: string
+  workflow_dispatch:
+    inputs:
+      app_path:
+        description: "Path to the OrgPortal web app"
+        required: false
+        default: "OrgPortal/web"
+        type: string
+      node_image:
+        description: "Node Docker image to use"
+        required: false
+        default: "node:24-alpine"
+        type: string
+
+jobs:
+  build:
+    runs-on: [self-hosted, linux, docker, node24]
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Verify Docker
+        run: docker --version
+
+      - name: Verify Node/npm in Docker
+        run: |
+          docker run --rm "${{ inputs.node_image || github.event.inputs.node_image || 'node:24-alpine' }}" sh -lc "node -v && npm -v"
+
+      - name: Build OrgPortal web in Docker
+        env:
+          APP_PATH: ${{ inputs.app_path || github.event.inputs.app_path || 'OrgPortal/web' }}
+          NODE_IMAGE: ${{ inputs.node_image || github.event.inputs.node_image || 'node:24-alpine' }}
+        run: |
+          if [ ! -d "$GITHUB_WORKSPACE/$APP_PATH" ]; then
+            echo "Path not found: $GITHUB_WORKSPACE/$APP_PATH"
+            exit 1
+          fi
+
+          docker run --rm \
+            -v "$GITHUB_WORKSPACE/$APP_PATH:/app" \
+            -w /app \
+            "$NODE_IMAGE" \
+            sh -lc "npm ci && npm run build"
